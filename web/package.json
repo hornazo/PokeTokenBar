@@ -1,0 +1,33 @@
+{
+  "name": "poketokenbar-web",
+  "version": "0.1.0",
+  "description": "Static trainer page for the PokeTokenBar app's local API",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vite",
+    "mock": "node dev/mock-app.mjs",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "allowScripts": {
+    "esbuild": false
+  },
+  "dependencies": {
+    "solid-js": "^1.9.17"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.4",
+    "vite-plugin-solid": "^2.11.14",
+    "vitest": "^5.0.3"
+  }
+}
