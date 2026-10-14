@@ -15,6 +15,7 @@ struct BattleView: View {
     @State private var startingPractice = false
     @State private var practiceFailed = false
     var nearby = NearbyBattleService.shared
+    var boards = BoardStore.shared
     @AppStorage(BattleTrainer.defaultsKey) private var trainerName = ""
     @State private var editedName = ""
 
@@ -25,12 +26,17 @@ struct BattleView: View {
         let l = store.l
         let candidates = store.battleCandidates
         if candidates.isEmpty {
-            VStack(spacing: 10) {
-                SpriteView(speciesID: nil, size: 72)
-                Text(l.battleNoCandidates).font(.callout).multilineTextAlignment(.center)
+            // Boards don't need a team: a trainer can join and rank on collection before they can battle.
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(spacing: 10) {
+                    SpriteView(speciesID: nil, size: 72)
+                    Text(l.battleNoCandidates).font(.callout).multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 28)
+                Divider()
+                BoardsSection(l: l)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 28)
         } else {
             // Fixed height, like Bag and Collection: the popover must not shrink when reopened.
             ScrollView {
@@ -38,6 +44,8 @@ struct BattleView: View {
                     teamSection(l)
                     Divider()
                     nearbySection(l)
+                    Divider()
+                    BoardsSection(l: l)
                     Divider()
                     Text(l.battleYourPokemon).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     LazyVGrid(columns: Self.columns, spacing: 6) {
@@ -121,8 +129,12 @@ struct BattleView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 if let incoming = nearby.incoming {
                     HStack(spacing: 6) {
-                        Label(l.battleChallengedBy(incoming.trainer), systemImage: "bolt.fill")
-                            .font(.caption.weight(.semibold))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Label(l.battleChallengedBy(incoming.trainer), systemImage: "bolt.fill")
+                                .font(.caption.weight(.semibold))
+                            Text(incoming.boardName.map(l.battleForBoard) ?? l.battleFriendly)
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
                         Spacer(minLength: 4)
                         Button(l.battleDecline) { ChallengePrompt.shared.dismiss(); nearby.declineIncoming() }
                         Button(l.battleAccept) { ChallengePrompt.shared.dismiss(); nearby.accept() }
@@ -145,7 +157,7 @@ struct BattleView: View {
                             Text(trainer.name).font(.callout).lineLimit(1)
                             Spacer()
                             if trainer.isCompatible {
-                                Button(l.battleChallenge) { nearby.challenge(trainer) }
+                                challengeButton(trainer, l)
                                     .controlSize(.small)
                                     .disabled(nearby.isBusy || readyTeam == nil)
                             } else {
@@ -155,6 +167,25 @@ struct BattleView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// With boards, the challenge names one; the other trainer's prompt shows it, and only a battle for a
+    /// board both hold scores there. Without boards it's a plain button for a friendly.
+    @ViewBuilder
+    private func challengeButton(_ trainer: NearbyTrainer, _ l: L) -> some View {
+        if boards.boards.isEmpty {
+            Button(l.battleChallenge) { nearby.challenge(trainer) }
+        } else {
+            Menu(l.battleChallenge) {
+                ForEach(boards.boards) { board in
+                    Button(l.battleForBoard(board.name)) { nearby.challenge(trainer, board: board.boardCode) }
+                }
+                Divider()
+                Button(l.battleFriendlyOption) { nearby.challenge(trainer) }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
         }
     }
 

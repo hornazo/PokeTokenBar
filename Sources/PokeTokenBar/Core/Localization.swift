@@ -1919,3 +1919,68 @@ extension L {
         }
     }
 }
+
+// MARK: Boards (leaderboards synced nearby)
+extension L {
+    var boardsTitle: String { t("리더보드", "Leaderboards", "リーダーボード", "Clasificaciones", "Classements", "Classificações", "Ranglisten") }
+    var boardsEmpty: String { t("그룹용 리더보드를 만들거나 코드로 참가하세요. 가까이 있는 트레이너와 동기화돼요.", "Create a leaderboard for your group, or join one with its code. Leaderboards sync with trainers nearby.", "グループのリーダーボードを作るか、コードで参加しましょう。近くのトレーナーと同期します。", "Crea una clasificación para tu grupo o únete a una con su código. Se sincronizan con entrenadores cercanos.", "Crée un classement pour ton groupe ou rejoins-en un avec son code. Les classements se synchronisent avec les dresseurs à proximité.", "Crie uma classificação para o seu grupo ou entre em uma com o código. Elas sincronizam com treinadores por perto.", "Erstelle eine Rangliste für deine Gruppe oder tritt einer mit ihrem Code bei. Ranglisten synchronisieren sich mit Trainern in der Nähe.") }
+    var boardsNamePlaceholder: String { t("리더보드 이름", "Leaderboard name", "リーダーボード名", "Nombre", "Nom", "Nome", "Name") }
+    var boardsCreate: String { t("만들기", "Create", "作成", "Crear", "Créer", "Criar", "Erstellen") }
+    var boardsCodePlaceholder: String { t("초대 코드", "Invite code", "招待コード", "Código de invitación", "Code d’invitation", "Código de convite", "Einladungscode") }
+    var boardsJoin: String { t("참가", "Join", "参加", "Unirse", "Rejoindre", "Entrar", "Beitreten") }
+    var boardsSync: String { t("근처 트레이너와 동기화", "Sync with trainers nearby", "近くのトレーナーと同期", "Sincronizar con entrenadores cercanos", "Synchroniser avec les dresseurs à proximité", "Sincronizar com treinadores por perto", "Mit Trainern in der Nähe synchronisieren") }
+    var boardsSyncHint: String { t("동기화를 켠 멤버끼리 가까이 있을 때 갱신돼요. 코드를 가진 사람은 누구나 참가할 수 있어요.", "Leaderboards update when members meet nearby with sync on. Anyone with a code can join its leaderboard.", "同期をオンにしたメンバー同士が近くにいると更新されます。コードを知っている人は誰でも参加できます。", "Se actualizan cuando los miembros coinciden cerca con la sincronización activada. Cualquiera con el código puede unirse.", "Ils se mettent à jour quand des membres se croisent avec la synchro activée. Toute personne ayant le code peut rejoindre.", "Atualizam quando membros se encontram por perto com a sincronização ligada. Quem tiver o código pode entrar.", "Sie aktualisieren sich, wenn Mitglieder sich mit aktivierter Synchronisierung begegnen. Wer den Code hat, kann beitreten.") }
+    func boardsMembers(_ count: Int) -> String {
+        t("트레이너 \(count)명", count == 1 ? "1 trainer" : "\(count) trainers", "トレーナー\(count)人", count == 1 ? "1 entrenador" : "\(count) entrenadores", count == 1 ? "1 dresseur" : "\(count) dresseurs", count == 1 ? "1 treinador" : "\(count) treinadores", count == 1 ? "1 Trainer" : "\(count) Trainer")
+    }
+    func boardsRank(_ rank: Int, of total: Int) -> String {
+        t("\(total)명 중 \(rank)위", "#\(rank) of \(total)", "\(total)人中 \(rank)位", "#\(rank) de \(total)", "\(rank)ᵉ sur \(total)", "#\(rank) de \(total)", "Platz \(rank) von \(total)")
+    }
+    func boardsPoints(_ points: Int) -> String {
+        t("\(points)점", "\(points) pts", "\(points)pt", "\(points) pts", "\(points) pts", "\(points) pts", "\(points) Pkt.")
+    }
+    var boardsCopyCode: String { t("코드 복사", "Copy code", "コードをコピー", "Copiar código", "Copier le code", "Copiar código", "Code kopieren") }
+    var boardsLeave: String { t("나가기", "Leave", "退出", "Salir", "Quitter", "Sair", "Verlassen") }
+    func boardsLeaveConfirm(_ name: String) -> String {
+        t("\(name)에서 나갈까요? 코드가 있으면 다시 참가할 수 있어요.", "Leave \(name)? You can rejoin with its code.", "\(name)から退出しますか？コードがあれば再参加できます。", "¿Salir de \(name)? Puedes volver con su código.", "Quitter \(name) ? Tu pourras revenir avec son code.", "Sair de \(name)? Dá para voltar com o código.", "\(name) verlassen? Mit dem Code kannst du wieder beitreten.")
+    }
+    func boardsSynced(_ relative: String) -> String {
+        t("\(relative) 동기화", "Synced \(relative)", "\(relative)に同期", "Sincronizado \(relative)", "Synchronisé \(relative)", "Sincronizado \(relative)", "Synchronisiert \(relative)")
+    }
+    var boardsNotSynced: String { t("아직 동기화 안 됨", "Not synced yet", "まだ同期していません", "Aún sin sincronizar", "Pas encore synchronisé", "Ainda não sincronizado", "Noch nicht synchronisiert") }
+    var boardsInvalidCode: String { t("올바른 코드가 아니에요.", "That code isn’t valid.", "コードが正しくありません。", "Ese código no es válido.", "Ce code n’est pas valide.", "Esse código não é válido.", "Dieser Code ist ungültig.") }
+    var boardsAlreadyJoined: String { t("이미 참가한 리더보드예요.", "You’re already on that leaderboard.", "すでに参加しています。", "Ya estás en esa clasificación.", "Tu es déjà dans ce classement.", "Você já está nessa classificação.", "Du bist bereits in dieser Rangliste.") }
+    var boardsKeyUnavailable: String { t("키체인에서 트레이너 키를 읽을 수 없어요.", "Couldn’t read your trainer key from the Keychain.", "キーチェーンからトレーナーキーを読み込めません。", "No se pudo leer tu clave de entrenador del Llavero.", "Impossible de lire ta clé de dresseur dans le trousseau.", "Não foi possível ler sua chave de treinador no Keychain.", "Dein Trainerschlüssel konnte nicht aus dem Schlüsselbund gelesen werden.") }
+    var boardsJoinTitle: String { t("이 리더보드에 참가할까요?", "Join this leaderboard?", "このリーダーボードに参加しますか？", "¿Unirte a esta clasificación?", "Rejoindre ce classement ?", "Entrar nesta classificação?", "Dieser Rangliste beitreten?") }
+    func boardsJoinMessage(_ code: String) -> String {
+        t("코드 \(code). 트레이너 이름과 도감·레벨·배틀 결과가 멤버에게 공유돼요.", "Code \(code). Your trainer name, collection, levels and battle results are shared with its members.", "コード \(code)。トレーナー名、図鑑、レベル、バトル結果がメンバーに共有されます。", "Código \(code). Tu nombre de entrenador, colección, niveles y resultados se comparten con sus miembros.", "Code \(code). Ton nom de dresseur, ta collection, tes niveaux et tes résultats sont partagés avec ses membres.", "Código \(code). Seu nome de treinador, coleção, níveis e resultados são compartilhados com os membros.", "Code \(code). Dein Trainername, deine Sammlung, Level und Kampfergebnisse werden mit den Mitgliedern geteilt.")
+    }
+    var battleFriendlyOption: String { t("친선전 (점수 없음)", "Friendly (no points)", "フレンドリー（ポイントなし）", "Amistoso (sin puntos)", "Amical (sans points)", "Amistosa (sem pontos)", "Freundschaftskampf (ohne Punkte)") }
+    var battleFriendly: String { t("친선전", "Friendly", "フレンドリー", "Amistoso", "Amical", "Amistosa", "Freundschaftskampf") }
+    func battleForBoard(_ name: String) -> String {
+        t("\(name) 리더보드", "For \(name)", "\(name)のリーダーボード", "Para \(name)", "Pour \(name)", "Para \(name)", "Für \(name)")
+    }
+}
+
+// MARK: Trainer page (local API)
+extension L {
+    var trainerPageTitle: String { t("트레이너 페이지", "Trainer page", "トレーナーページ", "Página de entrenador", "Page de dresseur", "Página de treinador", "Trainerseite") }
+    var trainerPageEnabled: String { t("웹 페이지가 트레이너 데이터를 읽도록 허용", "Let a web page read your trainer data", "Webページにトレーナーデータの読み取りを許可", "Permitir que una página web lea tus datos", "Autoriser une page web à lire tes données", "Permitir que uma página web leia seus dados", "Einer Webseite das Lesen deiner Trainerdaten erlauben") }
+    func trainerPageHint(_ address: String) -> String {
+        t("이 Mac에서만 \(address)로 열려요. 페이지마다 처음 한 번 허용을 물어봐요.", "Only on this Mac, at \(address). Each page asks once before it can read anything.", "このMacの \(address) だけで開きます。ページごとに最初に一度確認します。", "Solo en este Mac, en \(address). Cada página pide permiso una vez.", "Uniquement sur ce Mac, à \(address). Chaque page demande une fois l’autorisation.", "Só neste Mac, em \(address). Cada página pede permissão uma vez.", "Nur auf diesem Mac unter \(address). Jede Seite fragt einmal um Erlaubnis.")
+    }
+    var trainerPagePort: String { t("포트", "Port", "ポート", "Puerto", "Port", "Porta", "Port") }
+    func trainerPagePortInUse(_ port: Int) -> String {
+        t("\(port) 포트를 이미 다른 앱이 쓰고 있어요.", "Port \(port) is in use by another app.", "ポート\(port)は別のアプリが使用中です。", "Otra app usa el puerto \(port).", "Le port \(port) est utilisé par une autre app.", "Outra app usa a porta \(port).", "Port \(port) wird von einer anderen App verwendet.")
+    }
+    var trainerPageAllowed: String { t("허용한 페이지", "Allowed pages", "許可したページ", "Páginas permitidas", "Pages autorisées", "Páginas permitidas", "Erlaubte Seiten") }
+    var trainerPageRemove: String { t("삭제", "Remove", "削除", "Quitar", "Retirer", "Remover", "Entfernen") }
+    var trainerPageShareAIBand: String { t("주간 AI 사용량 구간 공유", "Share your weekly AI usage band", "週間AI使用量の帯を共有", "Compartir tu franja semanal de uso de IA", "Partager ta tranche hebdomadaire d’usage IA", "Compartilhar sua faixa semanal de uso de IA", "Wöchentliche KI-Nutzungsstufe teilen") }
+    var trainerPageShareAIBandHint: String { t("숫자 없이 가벼움·보통·많음·매우 많음만 페이지와 리더보드에 보여요.", "Only light, moderate, heavy or extreme, no numbers, on the page and your leaderboards.", "数値なしで「少なめ・普通・多め・非常に多い」だけをページとリーダーボードに表示します。", "Solo ligero, moderado, alto o extremo, sin cifras, en la página y tus clasificaciones.", "Seulement léger, modéré, élevé ou extrême, sans chiffres, sur la page et tes classements.", "Só leve, moderado, alto ou extremo, sem números, na página e nas suas classificações.", "Nur leicht, mittel, hoch oder extrem, ohne Zahlen, auf der Seite und in deinen Ranglisten.") }
+    func trainerPageAllowTitle(_ origin: String) -> String {
+        t("\(origin)에서 PokeTokenBar 데이터를 읽도록 허용할까요?", "Allow \(origin) to read your PokeTokenBar data?", "\(origin) にPokeTokenBarのデータの読み取りを許可しますか？", "¿Permitir que \(origin) lea tus datos de PokeTokenBar?", "Autoriser \(origin) à lire tes données PokeTokenBar ?", "Permitir que \(origin) leia seus dados do PokeTokenBar?", "\(origin) erlauben, deine PokeTokenBar-Daten zu lesen?")
+    }
+    var trainerPageAllowMessage: String { t("앱이 실행 중일 때 트레이너, 포켓몬, 배틀, 리더보드를 읽을 수 있어요. 설정에서 언제든 삭제할 수 있어요.", "It can read your trainer, pokemon, battles and leaderboards while the app runs. You can remove it in Settings.", "アプリの実行中、トレーナー、ポケモン、バトル、リーダーボードを読み取れます。設定からいつでも削除できます。", "Podrá leer tu entrenador, pokémon, combates y clasificaciones mientras la app esté abierta. Puedes quitarla en Ajustes.", "Elle pourra lire ton dresseur, tes pokémon, combats et classements tant que l’app tourne. Tu peux la retirer dans Réglages.", "Ela poderá ler seu treinador, pokémon, batalhas e classificações enquanto o app estiver aberto. Dá para remover em Ajustes.", "Sie kann deinen Trainer, deine Pokémon, Kämpfe und Ranglisten lesen, solange die App läuft. Du kannst sie in den Einstellungen entfernen.") }
+    var trainerPageAllow: String { t("허용", "Allow", "許可", "Permitir", "Autoriser", "Permitir", "Erlauben") }
+    var trainerPageDeny: String { t("허용 안 함", "Don’t Allow", "許可しない", "No permitir", "Refuser", "Não permitir", "Nicht erlauben") }
+}

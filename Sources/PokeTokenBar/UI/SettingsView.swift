@@ -73,6 +73,7 @@ struct SettingsView: View {
                         difficultyGroup
                         menuBarGroup(store)
                         floatingPetGroup(store)
+                        trainerPageGroup()
                         notificationsGroup(store)
                         updateGroup(store)
                         transferGroup(store)
@@ -310,6 +311,65 @@ struct SettingsView: View {
                 }
                 Divider()
                 toggleRow(l.floatingPetBubbleAlertsLabel, $store.floatingPetBubbleAlerts)
+            }
+        }
+    }
+
+    /// The trainer page's local API and what it (and boards) may show. Off by default.
+    @ViewBuilder
+    private func trainerPageGroup() -> some View {
+        @Bindable var page = TrainerPageSettings.shared
+        let server = TrainerPageCoordinator.shared.server
+        settingsSection(l.trainerPageTitle) {
+            groupRow {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(l.trainerPageEnabled)
+                    Text(l.trainerPageHint("http://127.0.0.1:\(page.port)")).font(.caption2).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Toggle(l.trainerPageEnabled, isOn: $page.enabled)
+                    .labelsHidden().toggleStyle(.switch).controlSize(.small)
+            }
+            if page.enabled {
+                Divider()
+                groupRow {
+                    Text(l.trainerPagePort).font(.callout)
+                    Spacer()
+                    TextField(l.trainerPagePort, value: Binding(
+                        get: { page.port },
+                        set: { if (1024...65535).contains($0) { page.port = $0 } }), format: .number.grouping(.never))
+                        .textFieldStyle(.roundedBorder).controlSize(.small).frame(width: 70)
+                        .multilineTextAlignment(.trailing)
+                }
+                if case .failed(let port, _) = server.state {
+                    Text(l.trainerPagePortInUse(port)).font(.caption2).foregroundStyle(.red).padding(.leading, 4)
+                }
+                if !page.pairedOrigins.isEmpty {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(l.trainerPageAllowed).font(.caption).foregroundStyle(.secondary)
+                        ForEach(page.pairedOrigins, id: \.self) { origin in
+                            HStack {
+                                Text(origin).font(.system(.caption, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+                                Spacer()
+                                Button(l.trainerPageRemove) { page.unpair(origin) }.controlSize(.small)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                }
+            }
+            Divider()
+            groupRow {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(l.trainerPageShareAIBand)
+                    Text(l.trainerPageShareAIBandHint).font(.caption2).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Toggle(l.trainerPageShareAIBand, isOn: $page.shareAIBand)
+                    .labelsHidden().toggleStyle(.switch).controlSize(.small)
             }
         }
     }

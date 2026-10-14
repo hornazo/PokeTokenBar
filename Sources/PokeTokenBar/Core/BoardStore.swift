@@ -25,6 +25,8 @@ final class BoardStore {
         static func placeholderName(_ code: BoardCode) -> String { "Board \(code.value.prefix(4))" }
     }
 
+    static let shared = BoardStore()
+
     enum StoreError: Error, Equatable { case invalidCode, alreadyJoined, invalidName }
 
     /// Every board we hold, including ones we left that still have a tombstone to deliver.
@@ -61,6 +63,14 @@ final class BoardStore {
         try await add(code: code, boardName: name, displayName: displayName, stats: stats)
         return code
     }
+
+    #if DEBUG
+    /// QA only (`PTB_DEBUG_BOARD`): a board with a known code, so two instances can share it unattended.
+    func createForTesting(code: BoardCode, name: String, displayName: String, stats: BoardStats) async throws {
+        guard board(code.boardId) == nil else { return }
+        try await add(code: code, boardName: name, displayName: displayName, stats: stats)
+    }
+    #endif
 
     func join(code raw: String, displayName: String, stats: BoardStats) async throws {
         guard let code = BoardCode(raw) else { throw StoreError.invalidCode }

@@ -20,7 +20,7 @@ final class NearbyBattleTests: XCTestCase {
     }
 
     func testInvitationsAreOnlyConsideredWhenVisibleIdleAndReady() throws {
-        let hello = try BattleWireMessage.hello(protocolVersion: BattleWireMessage.protocolVersion, trainer: "Ash").encoded()
+        let hello = try BattleWireMessage.invite(protocolVersion: BattleWireMessage.protocolVersion, trainer: "Ash", board: nil).encoded()
         func acceptable(_ context: Data? = nil, visible: Bool = true, busy: Bool = false, incoming: Bool = false,
                         team: Bool = true) -> Bool {
             NearbyBattleService.invitationIsAcceptable(context: context, isVisible: visible, isBusy: busy,
@@ -33,14 +33,16 @@ final class NearbyBattleTests: XCTestCase {
         XCTAssertFalse(acceptable(hello, team: false))
         XCTAssertFalse(acceptable(nil))
         XCTAssertFalse(acceptable(Data("junk".utf8)))
-        XCTAssertFalse(acceptable(try BattleWireMessage.hello(protocolVersion: 99, trainer: "Future").encoded()))
-        XCTAssertFalse(acceptable(try BattleWireMessage.nonce(1).encoded()), "the context must be a hello")
+        XCTAssertFalse(acceptable(try BattleWireMessage.invite(protocolVersion: 99, trainer: "Future", board: nil).encoded()))
+        XCTAssertFalse(acceptable(try BattleWireMessage.hello(protocolVersion: 3, trainer: "Old").encoded()),
+                       "a version 3 peer invites with a hello")
+        XCTAssertFalse(acceptable(try BattleWireMessage.nonce(1).encoded()), "the context must be an invite")
     }
 
     func testInvitationWhileHiddenIsDeclinedImmediately() throws {
         let service = NearbyBattleService()
         var answer: Bool?
-        let hello = try BattleWireMessage.hello(protocolVersion: BattleWireMessage.protocolVersion, trainer: "Ash").encoded()
+        let hello = try BattleWireMessage.invite(protocolVersion: BattleWireMessage.protocolVersion, trainer: "Ash", board: nil).encoded()
         service.invited(by: MCPeerID(displayName: "Ash"), context: hello) { accepted, _ in answer = accepted }
         XCTAssertEqual(answer, false)
         XCTAssertNil(service.incoming)

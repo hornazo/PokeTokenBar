@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 @preconcurrency import MultipeerConnectivity
 
@@ -9,6 +10,8 @@ enum NearbyBattle {
     static let serviceType = "ptb-battle"
     static let versionKey = "v"
     static let invitationTimeout: TimeInterval = 30
+    /// How long a finished board battle waits for the other side's signature on the result.
+    static let receiptTimeout: Duration = .seconds(10)
 }
 
 struct NearbyTrainer: Identifiable, Equatable {
@@ -20,7 +23,10 @@ struct NearbyTrainer: Identifiable, Equatable {
 struct IncomingChallenge: Identifiable {
     let id = UUID()
     let trainer: String
+    /// The board this battle counts for, when it's one of ours; nil is a friendly.
+    var boardName: String?
     fileprivate let peer: MCPeerID
+    fileprivate var scope: BattleScope?
     fileprivate let respond: (Bool, MCSession?) -> Void
 }
 
@@ -86,6 +92,12 @@ final class NearbyBattleService {
     var present: ((BattleSession, String) -> Void)?
     /// Asks the UI to show an incoming challenge while the popover may be closed.
     var announce: ((IncomingChallenge) -> Void)?
+    /// The boards we can battle for, and their names, from `BoardStore`.
+    var boardCodes: @MainActor () -> [BoardCode] = { [] }
+    var boardName: @MainActor (String) -> String? = { _ in nil }
+    /// A co-signed result of a board battle, for `BoardStore.record`.
+    var onReceipt: ((BattleReceipt) -> Void)?
+    var identity = TrainerIdentity.shared
 
     private var trainerName = ""
     private var team: BattleTeam?
@@ -99,6 +111,8 @@ final class NearbyBattleService {
     private var transport: MultipeerTransport?
     private var sessionPeer: MCPeerID?
     private var isChallenger = false
+    /// The board of the battle being set up, if any.
+    private var scope: BattleScope?
     private let proxy = MultipeerProxy()
 
     init() { proxy.owner = self }
@@ -136,6 +150,9 @@ final class NearbyBattleService {
         self.advertiser = advertiser
         self.browser = browser
         isVisible = true
+        // Loaded now: an invitation is built synchronously and a board battle needs the key.
+        let identity = identity
+        Task { _ = try? await identity.privateKey() }
         if case .failed = status { status = .idle }
     }
 
@@ -150,14 +167,16 @@ final class NearbyBattleService {
         if transport == nil { tearDownSession() }
     }
 
-    func challenge(_ trainer: NearbyTrainer) {
+    /// `board`: the board this battle counts for, if the other trainer holds it too; nil is a friendly.
+    func challenge(_ trainer: NearbyTrainer, board: BoardCode? = nil) {
         guard let browser, let peerID, !isBusy, trainer.isCompatible else { return }
         let session = makeSession(peerID)
         isChallenger = true
         sessionPeer = trainer.id
         status = .challenging(trainer.name)
-        let context = try? BattleWireMessage.hello(protocolVersion: BattleWireMessage.protocolVersion,
-                                                   trainer: trainerName).encoded()
+        scope = board.map { BattleScope(code: $0, invite: .make(for: $0), startedAt: BoardRules.now()) }
+        let context = try? BattleWireMessage.invite(protocolVersion: BattleWireMessage.protocolVersion,
+                                                    trainer: trainerName, board: scope?.invite).encoded()
         browser.invitePeer(trainer.id, to: session, withContext: context, timeout: NearbyBattle.invitationTimeout)
     }
 
@@ -167,6 +186,7 @@ final class NearbyBattleService {
         let session = makeSession(peerID)
         isChallenger = false
         sessionPeer = incoming.peer
+        scope = incoming.scope
         status = .connecting
         incoming.respond(true, session)
     }
@@ -199,7 +219,12 @@ final class NearbyBattleService {
             respond(false, nil)
             return
         }
-        let challenge = IncomingChallenge(trainer: BattleTrainer.sanitized(peer.displayName), peer: peer, respond: respond)
+        var challenge = IncomingChallenge(trainer: BattleTrainer.sanitized(peer.displayName), peer: peer, respond: respond)
+        if case .invite(_, _, let invite?) = try? context.map(BattleWireMessage.decode),
+           let code = invite.board(in: boardCodes()) {
+            challenge.scope = BattleScope(code: code, invite: invite, startedAt: nil)
+            challenge.boardName = boardName(code.boardId)
+        }
         incoming = challenge
         announce?(challenge)
     }
@@ -208,7 +233,7 @@ final class NearbyBattleService {
     static func invitationIsAcceptable(context: Data?, isVisible: Bool, isBusy: Bool, hasIncoming: Bool,
                                        hasTeam: Bool) -> Bool {
         guard isVisible, !isBusy, !hasIncoming, hasTeam, let context,
-              case .hello(let version, _) = try? BattleWireMessage.decode(context) else { return false }
+              case .invite(let version, _, _) = try? BattleWireMessage.decode(context) else { return false }
         return version == BattleWireMessage.protocolVersion
     }
 
@@ -250,18 +275,32 @@ final class NearbyBattleService {
     private func beginBattle(over transport: MultipeerTransport) async {
         guard let team else { return finishSession(.lost) }
         let link = BattleLink(transport: transport)
+        let key = try? await identity.privateKey()
         do {
             let match = try await BattleHandshake.run(link, isChallenger: isChallenger, trainer: trainerName,
-                                                      team: team, nonce: UInt64.random(in: 1...UInt64.max))
+                                                      team: team, nonce: UInt64.random(in: 1...UInt64.max),
+                                                      publicKey: key.map { TrainerSigning.encode($0.publicKey) }, scope: scope)
             await BattleNamePrefetch.load([match.myTeam, match.opponentTeam])
+            let opponent = NetworkOpponent(link: link)
+            // Leaving a board battle signs the other side's win, so the winner can keep it.
+            opponent.forfeitReceipt = { [match] in
+                guard let key, let receipt = match.receipt(winner: match.mySide.opponent) else { return nil }
+                return try? receipt.signature(by: key)
+            }
             let session = BattleSession(myTeam: match.myTeam, opponentTeam: match.opponentTeam, seed: match.seed,
-                                        opponent: NetworkOpponent(link: link), language: language,
+                                        opponent: opponent, language: language,
                                         mySide: match.mySide, opponentName: match.opponentName,
                                         turnTimeLimit: .seconds(60), names: names)
+            session.board = match.board.map { BattleBoardRef(id: $0.boardId, name: boardName($0.boardId) ?? "") }
             link.onInterrupt = { [weak session] error in session?.opponentInterrupted(error) }
             session.onFinish = { [weak self] outcome in
                 self?.onFinish?(outcome)
-                self?.finishSession(nil)
+                Task { [weak self] in
+                    if let receipt = await Self.coSignedReceipt(match, outcome: outcome, link: link, key: key) {
+                        self?.onReceipt?(receipt)
+                    }
+                    self?.finishSession(nil)
+                }
             }
             status = .idle
             present?(session, match.opponentName)
@@ -274,6 +313,43 @@ final class NearbyBattleService {
                 finishSession(.lost)
             }
         }
+    }
+
+    /// Collects both signatures on the result of a board battle and hands the receipt on. A battle that
+    /// ended on the field trades signatures; a forfeit already carried the loser's; a disconnect, a
+    /// timeout or our own forfeit leaves nothing to co-sign.
+    static func coSignedReceipt(_ match: BattleMatch, outcome: BattleSession.Outcome, link: BattleLink,
+                                key: Curve25519.Signing.PrivateKey?) async -> BattleReceipt? {
+        let winner: BattleSide?
+        switch outcome {
+        case .won: winner = match.mySide
+        case .lost: winner = match.mySide.opponent
+        case .draw: winner = nil
+        case .aborted: return nil
+        }
+        guard let key, var receipt = match.receipt(winner: winner), let mine = try? receipt.signature(by: key),
+              let opponentKey = match.opponentKey else { return nil }
+        let theirs: String?
+        switch link.mailbox.closedWith {
+        case .peerForfeited?:
+            theirs = link.peerForfeitReceipt
+        case nil:
+            try? link.send(.receipt(signature: mine))
+            if case .receipt(let signature)? = try? await link.next(timeout: NearbyBattle.receiptTimeout) {
+                theirs = signature
+            } else {
+                theirs = nil
+            }
+        default:
+            theirs = nil
+        }
+        guard let theirs else { return nil }
+        receipt.signatures = [TrainerSigning.encode(key.publicKey): mine, opponentKey: theirs]
+        guard receipt.isComplete else {
+            AppLog.write("nearby battle result not co-signed: the other side's signature didn't verify")
+            return nil
+        }
+        return receipt
     }
 
     /// Closing the battle window ends the connection too.
@@ -295,6 +371,7 @@ final class NearbyBattleService {
     }
 
     private func tearDownSession() {
+        scope = nil
         transport?.close()
         transport = nil
         session?.disconnect()
@@ -378,7 +455,7 @@ extension NearbyBattleService {
 
 enum IncomingChallengeStub {
     static func make(_ trainer: String) -> IncomingChallenge {
-        IncomingChallenge(trainer: trainer, peer: MCPeerID(displayName: trainer), respond: { _, _ in })
+        IncomingChallenge(trainer: trainer, peer: MCPeerID(displayName: trainer), scope: nil, respond: { _, _ in })
     }
 }
 #endif

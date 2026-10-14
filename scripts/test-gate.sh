@@ -44,6 +44,15 @@ LOGIC_CORE=(
   "Sources/PokeTokenBar/Core/BattleSession.swift"
   "Sources/PokeTokenBar/Core/BattleLink.swift"
   "Sources/PokeTokenBar/Core/BattleMoveRules.swift"
+  "Sources/PokeTokenBar/Core/BattleSpectator.swift"
+  "Sources/PokeTokenBar/Core/BoardModel.swift"
+  "Sources/PokeTokenBar/Core/BoardSyncProtocol.swift"
+  "Sources/PokeTokenBar/Core/BoardDeepLink.swift"
+  "Sources/PokeTokenBar/Core/LeaderboardStats.swift"
+  "Sources/PokeTokenBar/Core/LocalHTTP.swift"
+  "Sources/PokeTokenBar/Core/LocalAPIPayloads.swift"
+  "Sources/PokeTokenBar/Core/TrainerShowcase.swift"
+  "Sources/PokeTokenBar/Core/TrainerSigning.swift"
 )
 
 echo "▶ swift test (--enable-code-coverage)"

@@ -56,6 +56,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// 버튼 폭(=텍스트 길이)이나 스프라이트 크기가 변하면 레이어를 이미지 자리에 다시 맞춰야 한다.
     private var needsSpriteLayout = true
 
+    /// Links that arrive before launch finished (the browser can cold-launch the app), handled once it has.
+    private var earlyURLs: [URL] = []
+    private var didFinishLaunching = false
+
+    /// `poketokenbar://boards/join?code=…` from the trainer page.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard didFinishLaunching else { return earlyURLs.append(contentsOf: urls) }
+        for url in urls { _ = TrainerPageCoordinator.shared.open(url) }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 로그인 에이전트 등록(plist 의 RunAtLoad)이 이미 떠 있는 앱을 한 번 더 실행한다 — 나중에 뜬
         // 쪽이 물러난다. 메뉴바 항목을 만들기 전에 판정해 아이콘이 떴다 사라지는 깜빡임을 없애고,
@@ -81,6 +91,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         store = UsageStore()
         companion = CompanionStore()
         NearbyBattleUI.install(companion: companion)
+        TrainerPageCoordinator.shared.install(companion: companion, usage: store)
+        didFinishLaunching = true
+        earlyURLs.forEach { _ = TrainerPageCoordinator.shared.open($0) }
+        earlyURLs = []
         Task { await companion.preparePokemonProfiles() }
         updater = UpdateChecker()
         store.localizationLanguage = companion.language   // 알림 현지화용 미러 시드

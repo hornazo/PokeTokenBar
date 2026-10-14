@@ -34,8 +34,15 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
-    <key>NSLocalNetworkUsageDescription</key><string>PokeTokenBar finds trainers nearby so you can challenge them to a Pokémon battle.</string>
-    <key>NSBonjourServices</key><array><string>_ptb-battle._tcp</string><string>_ptb-battle._udp</string></array>
+    <key>NSLocalNetworkUsageDescription</key><string>PokeTokenBar finds trainers nearby so you can challenge them to a Pokémon battle and sync your leaderboards.</string>
+    <key>NSBonjourServices</key><array><string>_ptb-battle._tcp</string><string>_ptb-battle._udp</string><string>_ptb-board._tcp</string><string>_ptb-board._udp</string></array>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key><string>io.github.chattymin.poketokenbar.boards</string>
+            <key>CFBundleURLSchemes</key><array><string>poketokenbar</string></array>
+        </dict>
+    </array>
 </dict>
 </plist>
 PLIST

@@ -417,7 +417,7 @@ final class BattleEngineVersionTests: XCTestCase {
             _ = try state.resolveTurn(a[choices.below(a.count)], b[choices.below(b.count)])
             turns += 1
         }
-        XCTAssertEqual(BattleWireMessage.protocolVersion, 3)
+        XCTAssertEqual(BattleWireMessage.protocolVersion, 4)
         XCTAssertEqual(state.digest, "ae68e64cf558898535d9ef2d", """
             The reference battle changed. If you changed engine rules on purpose, bump \
             BattleWireMessage.protocolVersion and update both expected values here.

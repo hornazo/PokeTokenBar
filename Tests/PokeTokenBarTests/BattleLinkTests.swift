@@ -22,7 +22,10 @@ final class BattleWireTests: XCTestCase {
     func testMessagesRoundTrip() throws {
         let messages: [BattleWireMessage] = [
             .hello(protocolVersion: 1, trainer: "Ash"), .team(try team("a")), .nonce(42),
-            .action(turn: 3, action: .switchTo(2), digest: "abc"), .replacement(turn: 4, index: 1), .forfeit,
+            .action(turn: 3, action: .switchTo(2), digest: "abc"), .replacement(turn: 4, index: 1), .forfeit(receipt: nil),
+            .forfeit(receipt: "sig"), .receipt(signature: "sig"),
+            .invite(protocolVersion: 4, trainer: "Ash", board: BattleBoardInvite(nonce: "n", proof: "p")),
+            .identity(publicKey: "k", startedAt: 5, boardProof: nil),
         ]
         for message in messages {
             XCTAssertEqual(try BattleWireMessage.decode(try message.encoded()), message)
@@ -264,7 +267,7 @@ final class NetworkBattleTests: XCTestCase {
         link.onInterrupt = { [weak session] error in session?.opponentInterrupted(error) }
         await session.start()
         try peer.send(.action(turn: 1, action: .move(0), digest: session.state.digest))
-        try peer.send(.forfeit)
+        try peer.send(.forfeit(receipt: nil))
         await session.choose(.move(0))
         XCTAssertGreaterThan(session.state.turn, 1, "the turn itself still resolved")
         XCTAssertEqual(session.outcome, .won)

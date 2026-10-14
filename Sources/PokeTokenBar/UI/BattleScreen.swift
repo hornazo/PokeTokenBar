@@ -23,10 +23,12 @@ final class BattleWindowController: NSObject, NSWindowDelegate {
         self.window = window
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        BattleSpectatorHub.shared.show(session)
         Task { await session.start() }
     }
 
     func windowWillClose(_ notification: Notification) {
+        if let session { BattleSpectatorHub.shared.clear(session) }
         session?.abandon()
         session = nil
         window = nil
@@ -418,7 +420,7 @@ final class ChallengePrompt: NSObject, NSWindowDelegate {
 
     func show(_ challenge: IncomingChallenge, service: NearbyBattleService, l: L) {
         dismiss()
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 320, height: 130),
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 320, height: 150),
                             styleMask: [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = l.battle
         panel.level = .floating
@@ -463,9 +465,13 @@ struct ChallengePromptView: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Label(l.battleChallengedBy(challenge.trainer), systemImage: "bolt.fill")
-                .font(.headline)
-                .multilineTextAlignment(.center)
+            VStack(spacing: 4) {
+                Label(l.battleChallengedBy(challenge.trainer), systemImage: "bolt.fill")
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                Text(challenge.boardName.map(l.battleForBoard) ?? l.battleFriendly)
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
                 Button(l.battleDecline, action: decline)
                 Button(l.battleAccept, action: accept)
@@ -474,17 +480,18 @@ struct ChallengePromptView: View {
             }
         }
         .padding(18)
-        .frame(width: 320, height: 130)
+        .frame(width: 320, height: 150)
     }
 }
 
 /// Connects the nearby service to windows and the save; installed once at launch.
 @MainActor
 enum NearbyBattleUI {
-    static func install(_ service: NearbyBattleService = .shared, companion: CompanionStore) {
+    static func install(_ service: NearbyBattleService = .shared, companion: CompanionStore, boards: BoardStore = .shared) {
         service.present = { [weak companion, weak service] session, opponent in
             ChallengePrompt.shared.dismiss()
-            let title = companion?.l.battleAgainst(opponent) ?? opponent
+            var title = companion?.l.battleAgainst(opponent) ?? opponent
+            if let board = session.board?.name, !board.isEmpty { title += " · \(board)" }
             BattleWindowController.shared.present(session, title: title) { service?.battleWindowClosed() }
         }
         service.announce = { [weak companion, weak service] challenge in
@@ -492,6 +499,9 @@ enum NearbyBattleUI {
             ChallengePrompt.shared.show(challenge, service: service, l: companion.l)
         }
         service.onFinish = { [weak companion] outcome in companion?.recordBattle(outcome) }
+        service.boardCodes = { [weak boards] in boards?.boards.map(\.boardCode) ?? [] }
+        service.boardName = { [weak boards] id in boards?.board(id)?.name }
+        service.onReceipt = { [weak boards] receipt in boards?.record(receipt) }
         if UserDefaults.standard.string(forKey: BattleTrainer.defaultsKey) == nil {
             UserDefaults.standard.set(BattleTrainer.defaultName(), forKey: BattleTrainer.defaultsKey)
         }

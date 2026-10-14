@@ -76,6 +76,11 @@ struct BattleDisplay: Equatable, Sendable {
     }
 }
 
+struct BattleBoardRef: Equatable, Sendable {
+    let id: String
+    let name: String
+}
+
 /// Runs one battle for the local player: exchanges choices with the opponent, resolves turns and plays
 /// the resulting events back line by line.
 @MainActor @Observable
@@ -95,6 +100,8 @@ final class BattleSession {
     /// When the local player's choice is made for them. nil when there is no limit (practice).
     private(set) var turnDeadline: Date?
     var onFinish: ((Outcome) -> Void)?
+    /// The board a nearby battle counts for; nil for practice and friendlies.
+    var board: BattleBoardRef?
 
     private let myTeam: BattleTeam
     private let opponentTeam: BattleTeam
