@@ -15,6 +15,11 @@ enum AppEnv {
         ProcessInfo.processInfo.environment["PTB_PARITY"] == "1"
     }
 
+    /// `PTB_DEBUG_BOARD=CODE:Name` — the two-instance board QA run (debug builds only read it).
+    static var debugBoard: String? {
+        ProcessInfo.processInfo.environment["PTB_DEBUG_BOARD"]
+    }
+
     /// Lets a test drive a provider's real network code against a stubbed transport (URLProtocol, an
     /// injected URLSession). Set it in the test and reset it in `defer`.
     nonisolated(unsafe) static var allowLiveFetchForTesting = false

@@ -72,7 +72,7 @@ final class TrainerPageCoordinator {
     #if DEBUG
     /// `PTB_DEBUG_BOARD=CODE:Name` joins (or creates) that board at launch, for the two-instance QA run.
     private func joinDebugBoard() {
-        guard let spec = ProcessInfo.processInfo.environment["PTB_DEBUG_BOARD"],
+        guard let spec = AppEnv.debugBoard,
               let code = BoardCode(String(spec.split(separator: ":", maxSplits: 1).first ?? "")) else { return }
         let name = spec.split(separator: ":", maxSplits: 1).dropFirst().first.map(String.init) ?? ""
         Task {

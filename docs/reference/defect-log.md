@@ -625,6 +625,14 @@ read_when:
   Nothing compared the labels to the games. Guard: `testBadlyPoisonedUsesThePoisonLabelInEveryLanguage`.
   Still unverified against a game source: the French, Japanese, Korean and Portuguese status labels.
 
+## 복제 상태 (리더보드)
+
+- **최신값 우선(LWW)으로 병합되는 필드에 자리표시자 값을 서명해 넣지 않는다.** 코드로 참가한 쪽이
+  `"Board XXXX"` 를 보드 이름으로 서명하자, 참가 시각이 같거나 이르면 그 자리표시자가 생성자의 실제 이름을
+  이겼다(`BoardReplica.name` 은 가장 이른 멤버의 이름을 쓴다). 모르는 값은 빈 값으로 서명하고, 읽는 쪽이
+  빈 값을 후보에서 뺀다. 자리표시자는 표시할 때만 만든다. 회귀:
+  `testCreateThenJoinAndSyncNamesTheBoardForTheJoiner`.
+
 ## 프로세스·인스턴스
 
 - **로그인 실행을 LaunchAgent 로 등록하면 "등록하는 순간" 앱이 한 번 더 뜬다.** plist 의 `RunAtLoad` 는
