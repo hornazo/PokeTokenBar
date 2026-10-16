@@ -1,4 +1,4 @@
-import type { BattleResponse, BattleSnapshot, BoardsResponse, HistoryEntry, HistoryResponse, TrainerEntry, TrainerResponse, TrainersResponse } from './api/types';
+import type { Board, BattleResponse, BattleSnapshot, BoardsResponse, HistoryEntry, HistoryResponse, TrainerEntry, TrainerResponse, TrainersResponse } from './api/types';
 
 /** Everything the page shows, as last pushed by the app. */
 export interface LiveData {
@@ -49,4 +49,9 @@ export type TrainerFilter = 'all' | 'league';
 /** Everyone met, or only members of your league, in the app's order. */
 export function filterTrainers(trainers: TrainerEntry[], filter: TrainerFilter): TrainerEntry[] {
   return filter === 'league' ? trainers.filter((t) => t.league !== null) : trainers;
+}
+
+/** Your leagues and the ones you only watch, each in the app's order. */
+export function splitLeagues(boards: Board[]): { mine: Board[]; watched: Board[] } {
+  return { mine: boards.filter((b) => b.member), watched: boards.filter((b) => !b.member) };
 }

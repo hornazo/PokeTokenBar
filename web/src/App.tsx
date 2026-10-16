@@ -13,7 +13,7 @@ const TABS = [
   { name: 'me', label: 'Me', match: ['me'] },
   { name: 'battle', label: 'Battles', match: ['battle', 'battleView'] },
   { name: 'trainers', label: 'Trainers', match: ['trainers'] },
-  { name: 'boards', label: 'League', match: ['boards', 'board'] },
+  { name: 'boards', label: 'Leagues', match: ['boards', 'board'] },
 ] as const;
 
 /** The current route when it has this name, typed to that route's params. */

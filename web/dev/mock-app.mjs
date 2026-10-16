@@ -62,7 +62,7 @@ const boards = {
   syncEnabled: true,
   boards: [
     {
-      id: 'board-madrid', name: 'Madrid office', you: 'MCowBQYDK2VwAyEA7QK3mockmockmockmockmockmock1', lastSyncAt: now() - 25 * 60_000, syncedPeers: 3,
+      id: 'board-madrid', name: 'Madrid office', you: 'MCowBQYDK2VwAyEA7QK3mockmockmockmockmockmock1', lastSyncAt: now() - 25 * 60_000, syncedPeers: 3, member: true,
       members: [
         member(0, 'Lucía', 'M4XA', 1, 1840),
         member(1, 'Carlos', '7QK3', 2, 1520, { isYou: true, publicKey: 'MCowBQYDK2VwAyEA7QK3mockmockmockmockmockmock1' }),
@@ -180,8 +180,11 @@ const trainers = {
       team: [], vsYou: { wins: 0, losses: 0, draws: 0 }, lastBattleAt: null },
   ].sort((a, b) => ['available', 'idle', 'away'].indexOf(a.presence) - ['available', 'idle', 'away'].indexOf(b.presence)),
 };
-// Second board removed: one league per trainer.
-boards.boards.splice(1);
+// The second board becomes one this Mac only watches (one league per trainer), plus another.
+boards.boards[1] = { ...boards.boards[1], member: false, lastSyncAt: null, syncedPeers: 0,
+  members: boards.boards[1].members.filter((m) => !m.isYou).map((m, i) => ({ ...m, rank: i + 1 })) };
+boards.boards.push({ id: 'board-bcn', name: 'Barcelona crew', you: boards.boards[0].you, lastSyncAt: null, syncedPeers: 0, member: false,
+  members: [member(0, 'Pau', 'Q7RX', 1, 2210), member(2, 'Jordi', 'V3LK', 2, 1450), member(4, 'Laia', 'N8CB', 3, 300)] });
 
 // ---- server ------------------------------------------------------------------------------------------
 

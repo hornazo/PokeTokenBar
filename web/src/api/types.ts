@@ -50,8 +50,11 @@ export interface BoardMember {
   stats: BoardStats; score: Score; rank: number; // rank 1-based, ties share a rank
   counted: { wins: number; draws: number; losses: number }; // co-signed results that scored
 }
-export interface Board { id: string; name: string; you: string; members: BoardMember[]; lastSyncAt: number | null; syncedPeers: number }
-export interface BoardsResponse { boards: Board[]; syncEnabled: boolean }
+export interface Board {
+  id: string; name: string; you: string; members: BoardMember[]; lastSyncAt: number | null; syncedPeers: number;
+  member: boolean; // false for a league this Mac only watches (standings are public; joining needs the code)
+}
+export interface BoardsResponse { boards: Board[]; syncEnabled: boolean } // yours first, then watched ones, most recently active first
 /** available: visible for battles and at their Mac in the last 5 minutes. idle: visible, away from the Mac. away: not visible. */
 export type Presence = 'available' | 'idle' | 'away';
 export interface TrainerEntry {

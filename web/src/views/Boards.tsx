@@ -3,44 +3,62 @@ import type { Board, BoardMember, BoardsResponse } from '../api/types';
 import { Fingerprint, TeamStrip } from '../components';
 import { plural, relativeTime } from '../lib/format';
 import { href } from '../lib/router';
+import { splitLeagues } from '../live';
 
 const you = (board: Board) => board.members.find((m) => m.isYou);
 
-/** Your league; a save from before the one-league rule may still list several. */
+/** Your league, then every other league this Mac has seen nearby. With only your own, it opens directly. */
 export function Boards(props: { data: BoardsResponse }) {
+  const split = () => splitLeagues(props.data.boards);
   return (
-    <Show when={props.data.boards.length === 1 ? props.data.boards[0] : undefined} fallback={<BoardList data={props.data} />}>
+    <Show when={split().mine.length === 1 && !split().watched.length ? split().mine[0] : undefined}
+          fallback={<BoardList data={props.data} />}>
       {(only) => <BoardView boardId={only().id} data={props.data} />}
     </Show>
   );
 }
 
 function BoardList(props: { data: BoardsResponse }) {
+  const split = () => splitLeagues(props.data.boards);
   return (
     <div class="panel wide">
-      <div class="page-head"><div><div class="eyebrow">League</div><h1>{props.data.boards.length > 1 ? 'Leagues' : 'League'}</h1></div></div>
+      <div class="page-head"><div><div class="eyebrow">Leagues</div><h1>Leagues</h1></div></div>
       <p class="note sync-note">
         {props.data.syncEnabled
-          ? 'Sync is on: your league updates when members meet nearby.'
-          : 'Sync is off, so your league only shows what this Mac already has. Turn it on in the app.'}
+          ? 'Sync is on: leagues update when trainers meet nearby. Every league’s standings are public; joining one needs its code.'
+          : 'Sync is off, so this only shows what this Mac already has. Turn it on in the app.'}
       </p>
-      <Show when={props.data.boards.length} fallback={
+      <h3 class="section-title">Your league</h3>
+      <Show when={split().mine.length} fallback={
         <div class="empty">
           You’re not in a league yet. Create or join one in the app, under Battle → League. You can be in one league at a time.
         </div>
       }>
-        <div class="team-list">
-          <For each={props.data.boards}>
-            {(board) => (
-              <a class="team-row" href={href('board', board.id)}>
-                <span class="name">{board.name}</span>
-                <Show when={you(board)}>{(me) => <span class="badge">Rank {me().rank}</span>}</Show>
-                <span class="count">{plural(board.members.length, 'member')}</span>
-              </a>
-            )}
-          </For>
-        </div>
+        <LeagueRows boards={split().mine} />
       </Show>
+      <h3 class="section-title">Other leagues</h3>
+      <Show when={split().watched.length} fallback={
+        <div class="empty">None seen yet. Other leagues show up once this Mac syncs with trainers nearby.</div>
+      }>
+        <LeagueRows boards={split().watched} />
+      </Show>
+    </div>
+  );
+}
+
+function LeagueRows(props: { boards: Board[] }) {
+  return (
+    <div class="team-list">
+      <For each={props.boards}>
+        {(board) => (
+          <a class="team-row" href={href('board', board.id)}>
+            <span class="name">{board.name}</span>
+            <Show when={you(board)}>{(me) => <span class="badge">Rank {me().rank}</span>}</Show>
+            <Show when={!board.member && board.members[0]}>{(top) => <span class="count">Leader: {top().displayName}</span>}</Show>
+            <span class="count">{plural(board.members.length, 'member')}</span>
+          </a>
+        )}
+      </For>
     </div>
   );
 }
@@ -58,7 +76,7 @@ export function BoardView(props: { boardId: string; data: BoardsResponse }) {
         <div class="panel wide">
           <Show when={props.data.boards.length > 1}><a class="back" href={href('boards')}>← Leagues</a></Show>
           <div class="page-head">
-            <div><div class="eyebrow">League · {plural(b().members.length, 'member')}</div><h1>{b().name}</h1></div>
+            <div><div class="eyebrow">{b().member ? 'Your league' : 'Watching'} · {plural(b().members.length, 'member')}</div><h1>{b().name}</h1></div>
             <Show when={b().lastSyncAt}>{(at) => <span class="note">Last sync {relativeTime(at())}</span>}</Show>
           </div>
           <div class="table-wrap">
@@ -70,7 +88,8 @@ export function BoardView(props: { boardId: string; data: BoardsResponse }) {
             </table>
           </div>
           <p class="note">
-            {props.data.syncEnabled ? 'The league updates when members meet nearby. ' : 'Sync is off in the app, so this only shows what this Mac already has. '}
+            {b().member ? '' : 'You’re watching this league; joining it needs its code from a member. '}
+            {props.data.syncEnabled ? 'The league updates when trainers meet nearby. ' : 'Sync is off in the app, so this only shows what this Mac already has. '}
             A battle score only moves when both trainers sign the result.
           </p>
         </div>

@@ -308,3 +308,5 @@ ol.party, ul.dex { list-style: none; margin: 0; padding: 0; }
 .presence.available i { background: var(--ok); }
 .presence.idle i { background: var(--legend-bg); }
 .trainer-card .pill { text-decoration: none; }
+.section-title { font-size: var(--text-lead); margin: 24px 0 10px; }
+.sync-note + .section-title { margin-top: 8px; }

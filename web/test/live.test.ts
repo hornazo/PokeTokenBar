@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { BattleResponse, BattleSnapshot, BoardsResponse, HistoryEntry, HistoryResponse, TrainerEntry, TrainerResponse } from '../src/api/types';
-import { applyEvent, filterTrainers, historyRecord, isBattleLive, liveBattle, pastBattle, type LiveData } from '../src/live';
+import type { Board, BattleResponse, BattleSnapshot, BoardsResponse, HistoryEntry, HistoryResponse, TrainerEntry, TrainerResponse } from '../src/api/types';
+import { applyEvent, filterTrainers, splitLeagues, historyRecord, isBattleLive, liveBattle, pastBattle, type LiveData } from '../src/live';
 
 const trainer = { trainer: { name: 'Ash' } } as TrainerResponse;
 const boards: BoardsResponse = { boards: [], syncEnabled: true };
@@ -86,5 +86,15 @@ describe('trainers', () => {
     expect(filterTrainers(list, 'all')).toBe(list);
     expect(filterTrainers(list, 'league').map((t) => t.name)).toEqual(['Misty']);
     expect(filterTrainers([], 'league')).toEqual([]);
+  });
+});
+
+describe('leagues', () => {
+  const league = (id: string, member: boolean) => ({ id, member }) as Board;
+
+  it('splits yours from the watched ones, keeping the order', () => {
+    const boards = [league('mine', true), league('w2', false), league('w1', false)];
+    expect(splitLeagues(boards)).toEqual({ mine: [boards[0]], watched: [boards[1], boards[2]] });
+    expect(splitLeagues([])).toEqual({ mine: [], watched: [] });
   });
 });
