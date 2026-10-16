@@ -1,4 +1,4 @@
-import type { ApiErrorBody, BattleResponse, BoardsResponse, TrainerResponse } from './types';
+import type { ApiErrorBody, BattleResponse, BoardsResponse, HistoryResponse, TrainerResponse, TrainersResponse } from './types';
 
 export const DEFAULT_PORT = 47323;
 const PORT_KEY = 'ptb.port';
@@ -28,8 +28,8 @@ export function savePort(port: number): void {
   try { localStorage.setItem(PORT_KEY, String(port)); } catch { /* storage blocked: the port lasts for this visit only */ }
 }
 
-export type EventName = 'trainer' | 'battle' | 'boards';
-export const EVENT_NAMES: readonly EventName[] = ['trainer', 'battle', 'boards'];
+export type EventName = 'trainer' | 'battle' | 'boards' | 'history' | 'trainers';
+export const EVENT_NAMES: readonly EventName[] = ['trainer', 'battle', 'boards', 'history', 'trainers'];
 
 /** `unpaired`: the app is there but hasn't approved this page yet. `unreachable`: nothing answered. */
 export type ConnectionKind = 'connecting' | 'live' | 'unpaired' | 'unreachable' | 'error';
@@ -83,6 +83,8 @@ export class LocalApi {
   trainer() { return this.request<TrainerResponse>('/v1/trainer'); }
   battle() { return this.request<BattleResponse>('/v1/battle'); }
   boards() { return this.request<BoardsResponse>('/v1/boards'); }
+  history() { return this.request<HistoryResponse>('/v1/history'); }
+  trainers() { return this.request<TrainersResponse>('/v1/trainers'); }
 
   /** The connection state an error stands for. */
   static statusOf(err: unknown): Connection {

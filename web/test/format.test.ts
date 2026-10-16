@@ -87,7 +87,12 @@ describe('routes', () => {
     expect(parseRoute('')).toEqual({ name: 'me' });
     expect(parseRoute('#/me')).toEqual({ name: 'me' });
     expect(parseRoute('#/battle')).toEqual({ name: 'battle' });
+    expect(parseRoute('#/battle/live')).toEqual({ name: 'battleView', battleId: 'live' });
+    expect(parseRoute(href('battle', 'a b'))).toEqual({ name: 'battleView', battleId: 'a b' });
     expect(parseRoute('#/boards')).toEqual({ name: 'boards' });
+    expect(parseRoute('#/trainers')).toEqual({ name: 'trainers', filter: 'all' });
+    expect(parseRoute('#/trainers/league')).toEqual({ name: 'trainers', filter: 'league' });
+    expect(parseRoute('#/trainers/nope')).toEqual({ name: 'trainers', filter: 'all' });
     expect(parseRoute(href('board', 'b/1'))).toEqual({ name: 'board', boardId: 'b/1' });
     expect(parseRoute('#/join/ABCD-EFGH-JKMN')).toEqual({ name: 'join', code: 'ABCD-EFGH-JKMN' });
     expect(parseRoute('#/board')).toEqual({ name: 'boards' });

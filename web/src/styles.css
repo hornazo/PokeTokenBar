@@ -271,3 +271,40 @@ ol.party, ul.dex { list-style: none; margin: 0; padding: 0; }
 .join-code { margin: 0 0 8px; }
 .join-code code { font-size: 28px; font-weight: 700; letter-spacing: .06em; user-select: all; }
 .panel h1 + p { margin-top: 12px; }
+
+/* Battle cards and team strips */
+.battle-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.battle-card { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: calc(var(--radius) * 1.5); padding: 14px 16px; color: inherit; text-decoration: none; min-width: 0; }
+.battle-card:hover { border-color: var(--accent); }
+.battle-card.live { border-color: var(--accent-border); box-shadow: var(--shadow-resting); }
+.bc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bc-top .eyebrow { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bc-who { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.bc-who .n { font-family: var(--display); font-weight: 700; font-size: var(--text-lead); overflow-wrap: anywhere; }
+.bc-teams { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bc-teams .vs { font-family: var(--display); font-weight: 900; font-size: var(--text-overline); color: var(--muted); }
+.pill .live-dot { margin: 0 4px 0 0; }
+.pill.result.won { background: var(--accent-soft); color: var(--accent-ink); }
+.pill.result.lost { background: var(--danger-soft); color: var(--danger); }
+.pill.result.draw, .pill.result.aborted { background: var(--common-bg); color: var(--common-fg); }
+.team-strip { display: flex; gap: 2px; list-style: none; margin: 0; padding: 0; }
+.team-strip li { width: 36px; height: 36px; display: grid; place-items: center; overflow: hidden; }
+.team-strip img { width: 48px; height: 48px; image-rendering: pixelated; }
+.team-strip .egg { font-size: 18px; }
+.team-strip li.fainted { opacity: .35; filter: grayscale(1); }
+.who .team-strip { margin-top: 4px; }
+.battle-lower.single { grid-template-columns: minmax(0, 1fr); }
+
+/* Trainers */
+.filters { display: flex; gap: 4px; margin: 0 0 16px; }
+.filters a { padding: 6px 12px; border-radius: var(--radius); text-decoration: none; color: var(--fg); font-weight: 600;
+  font-size: var(--text-caption); background: var(--surface-muted); }
+.filters a[aria-current="page"] { background: var(--brand); color: var(--on-brand); }
+.filters .count { opacity: .75; font-weight: 500; margin-left: 2px; }
+.presence { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-caption); color: var(--muted); font-weight: 600; }
+.presence i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.presence.available { color: var(--ok); }
+.presence.available i { background: var(--ok); }
+.presence.idle i { background: var(--legend-bg); }
+.trainer-card .pill { text-decoration: none; }

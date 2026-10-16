@@ -1,7 +1,7 @@
 // Stand-in for the PokeTokenBar app's local API, for developing the page without the app.
 //   node dev/mock-app.mjs [port] [--unpaired]
-// Serves /v1/trainer, /v1/battle, /v1/boards and /v1/events on 127.0.0.1 with fixture data. A battle
-// advances every 1.5 s, ends, and starts again. CORS is open to any Origin: dev only.
+// Serves /v1/trainer, /v1/battle, /v1/boards, /v1/history, /v1/trainers and /v1/events on 127.0.0.1 with fixture data. A battle
+// advances every 1.5 s, ends, is added to the history, and starts again. CORS is open to any Origin: dev only.
 import http from 'node:http';
 
 const args = process.argv.slice(2);
@@ -35,6 +35,16 @@ const trainer = {
   aiBand: 'heavy',
 };
 
+const TEAMS = [
+  [[9, 'Blastoise', 50], [65, 'Alakazam', 52], [130, 'Gyarados', 58, true]],
+  [[25, 'Pikachu', 42], [6, 'Charizard', 55], [94, 'Gengar', 48]],
+  [[248, 'Tyranitar', 61], [445, 'Garchomp', 57]],
+  [[143, 'Snorlax', 37], [131, 'Lapras', 40], [149, 'Dragonite', 55], [59, 'Arcanine', 44], [197, 'Umbreon', 39], [196, 'Espeon', 39]],
+  [[133, 'Eevee', 12]],
+  [],
+];
+const teamOf = (n) => TEAMS[n % TEAMS.length].map(([speciesNum, species, level, shiny = false]) => ({ speciesNum, species, form: null, shiny, level }));
+
 const member = (n, name, fingerprint, rank, total, extra = {}) => ({
   publicKey: `MCowBQYDK2VwAyEA${fingerprint}mockmockmockmockmockmock${n}`, fingerprint, displayName: name, isYou: false,
   joinedAt: now() - 40 * DAY, updatedAt: now() - n * 7 * 3_600_000,
@@ -42,6 +52,7 @@ const member = (n, name, fingerprint, rank, total, extra = {}) => ({
     collection: { dex: 40 - n * 6, species: 38 - n * 6, shinies: 3 - Math.min(n, 3), graduated: 4 - Math.min(n, 4) },
     levels: { teamTotal: 280 - n * 30, top: 90 - n * 8 }, aiBand: ['extreme', 'heavy', 'moderate', 'light', null][n % 5],
     battleRecord: { wins: 20 - n * 3, losses: n * 2, draws: 1 },
+    ...(teamOf(n).length ? { team: teamOf(n) } : {}),
   },
   score: { total, battle: Math.round(total * 0.45), collection: Math.round(total * 0.3), levels: Math.round(total * 0.2), ai: total - Math.round(total * 0.45) - Math.round(total * 0.3) - Math.round(total * 0.2) },
   rank, counted: { wins: 9 - n, draws: 1, losses: n }, ...extra,
@@ -121,10 +132,56 @@ let seq = 1;
 let step = 0;
 let battle = newBattle(seq);
 
+// Finished battles, newest first, as the app keeps them: no moves, no deadline.
+const past = (id, ago, outcome, opponent, fingerprint, board, team, turn) => {
+  const b = newBattle(0);
+  b.sides[1].trainer = opponent;
+  b.sides[1].team = team.map(([n, name, level]) => sp(n, name, level, 120));
+  const loser = outcome === 'won' ? 1 : outcome === 'lost' ? 0 : -1;
+  if (loser >= 0) for (const m of b.sides[loser].team) { m.hp = 0; m.fainted = true; }
+  b.sides[0].active = loser === 0 ? b.sides[0].team.length - 1 : 0;
+  b.sides[1].active = loser === 1 ? b.sides[1].team.length - 1 : 0;
+  b.board = board; b.kind = opponent === 'CPU' ? 'practice' : 'nearby';
+  return { id, finishedAt: now() - ago, opponentFingerprint: fingerprint,
+    battle: { ...b, id, moves: [], turnDeadline: null, turn, outcome, message: b.log.at(-1) } };
+};
+const madrid = { id: 'board-madrid', name: 'Madrid office' };
+const history = { battles: [
+  past('h5', 40 * 60_000, 'lost', 'Dani', 'Z9TE', madrid, [[248, 'Tyranitar', 61], [445, 'Garchomp', 57]], 14),
+  past('h4', 3 * 3_600_000, 'won', 'Marta', 'F2HV', madrid, [[143, 'Snorlax', 37], [131, 'Lapras', 40], [149, 'Dragonite', 55]], 11),
+  past('h3', DAY, 'draw', 'Sam', 'K1JB', null, [[133, 'Eevee', 12]], 6),
+  past('h2', 2 * DAY, 'aborted', 'Iván', 'C8RS', madrid, [[59, 'Arcanine', 44]], 3),
+  past('h1', 4 * DAY, 'won', 'CPU', null, null, [[19, 'Rattata', 20], [16, 'Pidgey', 18]], 5),
+] };
+
 function advance() {
-  if (step >= steps.length) { seq += 1; step = 0; battle = newBattle(seq); return; }
+  if (step >= steps.length) {
+    history.battles.unshift({ id: `h-${battle.id}`, finishedAt: now(), opponentFingerprint: 'M4XA', battle: { ...structuredClone(battle), id: `h-${battle.id}`, moves: [], turnDeadline: null } });
+    history.battles.splice(100);
+    for (const res of clients) send(res, 'history', history);
+    seq += 1; step = 0; battle = newBattle(seq); return;
+  }
   steps[step++](battle);
 }
+
+// Everyone met: the Madrid league plus a couple of people only seen or battled.
+const presences = ['available', 'idle', 'away', 'available', 'away', 'away'];
+const trainers = {
+  trainers: [
+    ...boards.boards[0].members.filter((m) => !m.isYou).map((m, i) => ({
+      publicKey: m.publicKey, fingerprint: m.fingerprint, name: m.displayName, presence: presences[i],
+      lastSeenAt: presences[i] === 'away' ? now() - (i + 1) * 5 * 3_600_000 : now(),
+      league: { id: 'board-madrid', name: 'Madrid office', rank: m.rank, points: m.score.total },
+      team: m.stats.team ?? [], vsYou: { wins: i, losses: 1, draws: 0 }, lastBattleAt: now() - i * DAY,
+    })),
+    { publicKey: 'MCowSam', fingerprint: 'K1JB', name: 'Sam', presence: 'idle', lastSeenAt: now(), league: null,
+      team: [{ speciesNum: 133, species: 'Eevee', form: null, shiny: false, level: 12 }], vsYou: { wins: 0, losses: 0, draws: 1 }, lastBattleAt: now() - DAY },
+    { publicKey: 'MCowRobin', fingerprint: 'T6NG', name: 'Robin', presence: 'away', lastSeenAt: now() - 6 * DAY, league: null,
+      team: [], vsYou: { wins: 0, losses: 0, draws: 0 }, lastBattleAt: null },
+  ].sort((a, b) => ['available', 'idle', 'away'].indexOf(a.presence) - ['available', 'idle', 'away'].indexOf(b.presence)),
+};
+// Second board removed: one league per trainer.
+boards.boards.splice(1);
 
 // ---- server ------------------------------------------------------------------------------------------
 
@@ -153,11 +210,15 @@ const server = http.createServer((req, res) => {
     case '/v1/trainer': return json(200, trainer);
     case '/v1/battle': return json(200, battleBody());
     case '/v1/boards': return json(200, boards);
+    case '/v1/history': return json(200, history);
+    case '/v1/trainers': return json(200, trainers);
     case '/v1/events':
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
       send(res, 'trainer', trainer);
       send(res, 'battle', battleBody());
       send(res, 'boards', boards);
+      send(res, 'history', history);
+      send(res, 'trainers', trainers);
       clients.add(res);
       req.on('close', () => clients.delete(res));
       return;

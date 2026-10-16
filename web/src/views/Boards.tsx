@@ -1,23 +1,32 @@
 import { createSignal, For, Show } from 'solid-js';
 import type { Board, BoardMember, BoardsResponse } from '../api/types';
-import { Fingerprint } from '../components';
+import { Fingerprint, TeamStrip } from '../components';
 import { plural, relativeTime } from '../lib/format';
 import { href } from '../lib/router';
 
 const you = (board: Board) => board.members.find((m) => m.isYou);
 
+/** Your league; a save from before the one-league rule may still list several. */
 export function Boards(props: { data: BoardsResponse }) {
   return (
+    <Show when={props.data.boards.length === 1 ? props.data.boards[0] : undefined} fallback={<BoardList data={props.data} />}>
+      {(only) => <BoardView boardId={only().id} data={props.data} />}
+    </Show>
+  );
+}
+
+function BoardList(props: { data: BoardsResponse }) {
+  return (
     <div class="panel wide">
-      <div class="page-head"><div><div class="eyebrow">Leaderboards</div><h1>Boards</h1></div></div>
+      <div class="page-head"><div><div class="eyebrow">League</div><h1>{props.data.boards.length > 1 ? 'Leagues' : 'League'}</h1></div></div>
       <p class="note sync-note">
         {props.data.syncEnabled
-          ? 'Sync is on: boards update when members meet nearby.'
-          : 'Sync is off, so boards only show what this Mac already has. Turn it on in the app.'}
+          ? 'Sync is on: your league updates when members meet nearby.'
+          : 'Sync is off, so your league only shows what this Mac already has. Turn it on in the app.'}
       </p>
       <Show when={props.data.boards.length} fallback={
         <div class="empty">
-          No boards yet. Create or join one in the app, under Battle → Boards. Boards sync with trainers nearby.
+          You’re not in a league yet. Create or join one in the app, under Battle → League. You can be in one league at a time.
         </div>
       }>
         <div class="team-list">
@@ -41,15 +50,15 @@ export function BoardView(props: { boardId: string; data: BoardsResponse }) {
   return (
     <Show when={board()} fallback={
       <div class="center">
-        <h2>Board not found</h2>
-        <p>This Mac doesn’t have a board with that id. <a href={href('boards')}>Back to boards</a></p>
+        <h2>League not found</h2>
+        <p>This Mac isn’t in a league with that id. <a href={href('boards')}>Your league</a></p>
       </div>
     }>
       {(b) => (
         <div class="panel wide">
-          <a class="back" href={href('boards')}>← Boards</a>
+          <Show when={props.data.boards.length > 1}><a class="back" href={href('boards')}>← Leagues</a></Show>
           <div class="page-head">
-            <div><div class="eyebrow">{plural(b().members.length, 'member')}</div><h1>{b().name}</h1></div>
+            <div><div class="eyebrow">League · {plural(b().members.length, 'member')}</div><h1>{b().name}</h1></div>
             <Show when={b().lastSyncAt}>{(at) => <span class="note">Last sync {relativeTime(at())}</span>}</Show>
           </div>
           <div class="table-wrap">
@@ -60,7 +69,10 @@ export function BoardView(props: { boardId: string; data: BoardsResponse }) {
               <For each={b().members}>{(m) => <Row member={m} />}</For>
             </table>
           </div>
-          <p class="note">Boards update when members meet nearby with sync on. A score only moves when both trainers sign the result.</p>
+          <p class="note">
+            {props.data.syncEnabled ? 'The league updates when members meet nearby. ' : 'Sync is off in the app, so this only shows what this Mac already has. '}
+            A battle score only moves when both trainers sign the result.
+          </p>
         </div>
       )}
     </Show>
@@ -78,6 +90,9 @@ function Row(props: { member: BoardMember }) {
         <td>
           <div class="who">
             <div class="n">{m().displayName} <Fingerprint value={m().fingerprint} /><Show when={m().isYou}> <span class="pill accent">You</span></Show></div>
+            <Show when={m().stats.team?.length}>
+              <TeamStrip team={(m().stats.team ?? []).map((t) => ({ ...t, name: t.species }))} label={`${m().displayName}’s battle team`} />
+            </Show>
             <div class="p">updated {relativeTime(m().updatedAt)}</div>
           </div>
         </td>

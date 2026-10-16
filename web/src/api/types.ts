@@ -34,7 +34,15 @@ export interface BattleSnapshot {
   turnDeadline: number | null;           // unix ms
 }
 export interface BattleResponse { battle: BattleSnapshot | null }
-export interface BoardStats { collection: { dex: number; species: number; shinies: number; graduated: number }; levels: { teamTotal: number; top: number }; aiBand: AiBand | null; battleRecord: BattleRecord }
+/** A finished battle: `battle` is the field as it ended, with an empty `moves` and a null `turnDeadline`. */
+export interface HistoryEntry { id: string; finishedAt: number; opponentFingerprint?: string | null; battle: BattleSnapshot }
+export interface HistoryResponse { battles: HistoryEntry[] } // newest first, up to 100
+export interface BoardTeamMember { speciesNum: number; species: string; form?: string | null; shiny: boolean; level: number } // species in that trainer's language
+export interface BoardStats {
+  collection: { dex: number; species: number; shinies: number; graduated: number }; levels: { teamTotal: number; top: number };
+  aiBand?: AiBand | null; battleRecord: BattleRecord;
+  team?: BoardTeamMember[]; // battle team in slot order; missing when empty or signed by an older build
+}
 export interface Score { total: number; battle: number; collection: number; levels: number; ai: number }
 export interface BoardMember {
   publicKey: string; fingerprint: string; displayName: string; isYou: boolean;
@@ -44,4 +52,15 @@ export interface BoardMember {
 }
 export interface Board { id: string; name: string; you: string; members: BoardMember[]; lastSyncAt: number | null; syncedPeers: number }
 export interface BoardsResponse { boards: Board[]; syncEnabled: boolean }
+/** available: visible for battles and at their Mac in the last 5 minutes. idle: visible, away from the Mac. away: not visible. */
+export type Presence = 'available' | 'idle' | 'away';
+export interface TrainerEntry {
+  publicKey: string; fingerprint: string; name: string; presence: Presence;
+  lastSeenAt: number | null;  // unix ms; now while visible, null when never seen nearby
+  league: { id: string; name: string; rank: number; points: number } | null; // in your league
+  team: BoardTeamMember[];    // their league row's team, else their team in your last battle
+  vsYou: BattleRecord;        // your wins, losses and draws against them
+  lastBattleAt: number | null;
+}
+export interface TrainersResponse { trainers: TrainerEntry[] } // available first, then idle, then by last seen
 export interface ApiErrorBody { error: string; message: string } // e.g. 403 origin_not_paired, 421 misdirected

@@ -101,3 +101,20 @@ export function TeamDots(props: { states: { fainted: boolean; active: boolean }[
     </span>
   );
 }
+
+export interface StripMon { speciesNum: number; shiny: boolean; name: string; level: number; fainted?: boolean }
+
+/** A team as a row of small sprites, lead first; fainted ones greyed out. */
+export function TeamStrip(props: { team: StripMon[]; label: string }) {
+  return (
+    <ul class="team-strip" aria-label={props.label}>
+      <For each={props.team}>
+        {(m) => (
+          <li classList={{ fainted: Boolean(m.fainted) }} title={`${m.name} · Lv ${m.level}${m.shiny ? ' · shiny' : ''}${m.fainted ? ' · fainted' : ''}`}>
+            <Sprite speciesNum={m.speciesNum} shiny={m.shiny} alt={`${m.name}, level ${m.level}${m.fainted ? ', fainted' : ''}`} />
+          </li>
+        )}
+      </For>
+    </ul>
+  );
+}

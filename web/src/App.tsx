@@ -1,16 +1,19 @@
 import { Match, Show, Switch } from 'solid-js';
 import { Logo, Needs } from './components';
 import { href, route, type Route } from './lib/router';
+import { liveBattle } from './live';
 import { app } from './state';
-import { Battle } from './views/Battle';
+import { Battles, BattleView } from './views/Battle';
 import { BoardView, Boards } from './views/Boards';
 import { Join } from './views/Join';
+import { Trainers } from './views/Trainers';
 import { PlayerCard } from './views/PlayerCard';
 
 const TABS = [
   { name: 'me', label: 'Me', match: ['me'] },
-  { name: 'battle', label: 'Battle', match: ['battle'] },
-  { name: 'boards', label: 'Boards', match: ['boards', 'board'] },
+  { name: 'battle', label: 'Battles', match: ['battle', 'battleView'] },
+  { name: 'trainers', label: 'Trainers', match: ['trainers'] },
+  { name: 'boards', label: 'League', match: ['boards', 'board'] },
 ] as const;
 
 /** The current route when it has this name, typed to that route's params. */
@@ -52,7 +55,19 @@ export function App() {
         </Show>
         <Switch>
           <Match when={routeOf('battle')}>
-            <Needs value={app.data().battle}>{(r) => <Battle battle={r.battle} />}</Needs>
+            <Needs value={app.data().trainer}>
+              {() => <Battles live={liveBattle(app.data())} history={app.data().history?.battles ?? []} />}
+            </Needs>
+          </Match>
+          <Match when={routeOf('battleView')}>
+            {(r) => (
+              <Needs value={app.data().trainer}>
+                {() => <BattleView battleId={r().battleId} live={app.data().battle?.battle} history={app.data().history?.battles ?? []} />}
+              </Needs>
+            )}
+          </Match>
+          <Match when={routeOf('trainers')}>
+            {(r) => <Needs value={app.data().trainers}>{(data) => <Trainers data={data} filter={r().filter} />}</Needs>}
           </Match>
           <Match when={routeOf('boards')}>
             <Needs value={app.data().boards}>{(data) => <Boards data={data} />}</Needs>

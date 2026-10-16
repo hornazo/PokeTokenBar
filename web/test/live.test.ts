@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { BattleResponse, BattleSnapshot, BoardsResponse, TrainerResponse } from '../src/api/types';
-import { applyEvent, isBattleLive, type LiveData } from '../src/live';
+import type { BattleResponse, BattleSnapshot, BoardsResponse, HistoryEntry, HistoryResponse, TrainerEntry, TrainerResponse } from '../src/api/types';
+import { applyEvent, filterTrainers, historyRecord, isBattleLive, liveBattle, pastBattle, type LiveData } from '../src/live';
 
 const trainer = { trainer: { name: 'Ash' } } as TrainerResponse;
 const boards: BoardsResponse = { boards: [], syncEnabled: true };
@@ -41,5 +41,50 @@ describe('isBattleLive', () => {
     expect(isBattleLive({ battle: { battle: null } })).toBe(false);
     expect(isBattleLive({ battle: battle(null) })).toBe(true);
     expect(isBattleLive({ battle: battle('won') })).toBe(false);
+  });
+
+  it('treats a missing outcome as none, as an older app sends it', () => {
+    expect(isBattleLive({ battle: { battle: { id: 'b' } as BattleSnapshot } })).toBe(true);
+    expect(liveBattle({ battle: { battle: { id: 'b' } as BattleSnapshot } })?.id).toBe('b');
+    expect(liveBattle({ battle: battle('lost') })).toBeUndefined();
+  });
+});
+
+const entry = (id: string, outcome: BattleSnapshot['outcome']): HistoryEntry =>
+  ({ id, finishedAt: 1, battle: { id, outcome } as BattleSnapshot });
+
+describe('history', () => {
+  const history: HistoryResponse = { battles: [entry('h3', 'won'), entry('h2', 'aborted'), entry('h1', 'lost'), entry('h0', 'won')] };
+
+  it('arrives as its own event', () => {
+    expect(applyEvent({ trainer }, 'history', history)).toEqual({ trainer, history });
+  });
+
+  it('finds a past battle by id', () => {
+    expect(pastBattle({ history }, 'h1')?.battle.outcome).toBe('lost');
+    expect(pastBattle({ history }, 'nope')).toBeUndefined();
+    expect(pastBattle({}, 'h1')).toBeUndefined();
+  });
+
+  it('counts results, leaving out called-off battles', () => {
+    expect(historyRecord(history.battles)).toEqual({ wins: 2, losses: 1, draws: 0 });
+    expect(historyRecord([])).toEqual({ wins: 0, losses: 0, draws: 0 });
+  });
+});
+
+const met = (name: string, league: TrainerEntry['league']): TrainerEntry =>
+  ({ publicKey: name, fingerprint: 'ABCD', name, presence: 'away', lastSeenAt: null, league, team: [], vsYou: { wins: 0, losses: 0, draws: 0 }, lastBattleAt: null });
+
+describe('trainers', () => {
+  const list = [met('Erika', null), met('Misty', { id: 'k', name: 'Kanto', rank: 2, points: 9 }), met('Gary', null)];
+
+  it('arrives as its own event', () => {
+    expect(applyEvent({}, 'trainers', { trainers: list }).trainers?.trainers).toBe(list);
+  });
+
+  it('filters to your league, keeping the order', () => {
+    expect(filterTrainers(list, 'all')).toBe(list);
+    expect(filterTrainers(list, 'league').map((t) => t.name)).toEqual(['Misty']);
+    expect(filterTrainers([], 'league')).toEqual([]);
   });
 });
