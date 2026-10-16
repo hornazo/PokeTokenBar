@@ -155,6 +155,11 @@ struct BattleView: View {
                         HStack {
                             Image(systemName: "person.crop.circle").foregroundStyle(.secondary)
                             Text(trainer.name).font(.callout).lineLimit(1)
+                            if !trainer.isActive {
+                                Label(l.battleTrainerIdle, systemImage: "moon.zzz")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                                    .help(l.battleTrainerIdleHelp)
+                            }
                             Spacer()
                             if trainer.isCompatible {
                                 challengeButton(trainer, l)

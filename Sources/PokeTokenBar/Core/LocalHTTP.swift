@@ -59,6 +59,8 @@ enum LocalHTTP {
         case trainer = "/v1/trainer"
         case battle = "/v1/battle"
         case boards = "/v1/boards"
+        case history = "/v1/history"
+        case trainers = "/v1/trainers"
     }
 
     /// What to do with a request.

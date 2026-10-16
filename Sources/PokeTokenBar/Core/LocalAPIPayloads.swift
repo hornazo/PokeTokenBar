@@ -39,6 +39,16 @@ enum LocalAPIPayloads {
         private enum CodingKeys: String, CodingKey { case battle }
     }
 
+    /// Everyone this Mac has met, available ones first.
+    struct Trainers: Encodable {
+        let trainers: [TrainerListEntry]
+    }
+
+    /// Finished battles, newest first.
+    struct History: Encodable {
+        let battles: [BattleHistoryEntry]
+    }
+
     struct Member: Encodable {
         let publicKey: String
         let fingerprint: String

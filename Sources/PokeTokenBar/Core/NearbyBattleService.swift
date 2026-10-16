@@ -18,6 +18,12 @@ struct NearbyTrainer: Identifiable, Equatable {
     let id: MCPeerID
     var name: String { id.displayName }
     let isCompatible: Bool
+    /// Their trainer key, when their build advertises it.
+    var publicKey: String? = nil
+    /// At their Mac in the last few minutes.
+    var isActive = true
+
+    var presence: TrainerPresence { isActive ? .available : .idle }
 }
 
 struct IncomingChallenge: Identifiable {
@@ -105,6 +111,9 @@ final class NearbyBattleService {
     private var names: @MainActor (PokemonNameResource) -> [String: String]? = { _ in nil }
 
     private var peerID: MCPeerID?
+    /// Whether our user is at the keyboard, advertised to the others; set by `setUserActive`.
+    private var isUserActive = true
+    private var advertisedInfo: [String: String]?
     private var advertiser: MCNearbyServiceAdvertiser?
     private var browser: MCNearbyServiceBrowser?
     private var session: MCSession?
@@ -138,28 +147,63 @@ final class NearbyBattleService {
 
     func start() {
         guard !isVisible else { return }
+        isVisible = true
+        browse()
+        // Advertised once the key is loaded, so the others see it from the start: discovery info can't
+        // change without a restart. An invitation is built synchronously, and a board battle needs it too.
+        let identity = identity
+        Task { [weak self] in
+            _ = try? await identity.privateKey()
+            self?.advertise()
+        }
+        if case .failed = status { status = .idle }
+    }
+
+    /// Re-advertises when our user goes idle or comes back, so the others see it before challenging.
+    func setUserActive(_ active: Bool) {
+        isUserActive = active
+        advertise()
+    }
+
+    /// A fresh peer ID with its own browser. Peers found by the previous browser stay listed until this one
+    /// finds them again (same ID) or they're lost.
+    private func browse() {
+        browser?.stopBrowsingForPeers()
         let peer = MCPeerID(displayName: trainerName.isEmpty ? BattleTrainer.defaultName() : trainerName)
-        let info = [NearbyBattle.versionKey: String(BattleWireMessage.protocolVersion)]
-        let advertiser = MCNearbyServiceAdvertiser(peer: peer, discoveryInfo: info, serviceType: NearbyBattle.serviceType)
         let browser = MCNearbyServiceBrowser(peer: peer, serviceType: NearbyBattle.serviceType)
-        advertiser.delegate = proxy
         browser.delegate = proxy
-        advertiser.startAdvertisingPeer()
         browser.startBrowsingForPeers()
         peerID = peer
-        self.advertiser = advertiser
         self.browser = browser
-        isVisible = true
-        // Loaded now: an invitation is built synchronously and a board battle needs the key.
-        let identity = identity
-        Task { _ = try? await identity.privateKey() }
-        if case .failed = status { status = .idle }
+    }
+
+    /// Starts advertising, or restarts it when what we'd advertise changed. Discovery info can't be updated in
+    /// place, and a browser that already found a peer ID never reports it again, so a change goes out under a
+    /// new peer ID; it waits while a challenge or battle needs the current one.
+    private func advertise() {
+        guard isVisible, peerID != nil else { return }
+        let info = NearbyDiscovery.info(version: BattleWireMessage.protocolVersion, publicKey: identity.publicKey,
+                                        active: isUserActive)
+        guard info != advertisedInfo || advertiser == nil else { return }
+        if let advertiser {
+            guard !isBusy, incoming == nil else { return }   // retried on the next presence check
+            advertiser.stopAdvertisingPeer()
+            self.advertiser = nil
+            browse()
+        }
+        guard let peerID else { return }
+        let advertiser = MCNearbyServiceAdvertiser(peer: peerID, discoveryInfo: info, serviceType: NearbyBattle.serviceType)
+        advertiser.delegate = proxy
+        advertiser.startAdvertisingPeer()
+        self.advertiser = advertiser
+        advertisedInfo = info
     }
 
     func stop() {
         advertiser?.stopAdvertisingPeer()
         browser?.stopBrowsingForPeers()
         advertiser = nil
+        advertisedInfo = nil
         browser = nil
         trainers = []
         declineIncoming()
@@ -204,8 +248,10 @@ final class NearbyBattleService {
     func found(_ peer: MCPeerID, info: [String: String]?) {
         guard peer != peerID else { return }
         let compatible = info?[NearbyBattle.versionKey] == String(BattleWireMessage.protocolVersion)
-        trainers.removeAll { $0.id == peer }
-        trainers.append(NearbyTrainer(id: peer, isCompatible: compatible))
+        let (publicKey, active) = NearbyDiscovery.parse(info)
+        // A trainer whose presence changed comes back under a new peer ID: keep only the newest.
+        trainers.removeAll { $0.id == peer || (publicKey != nil && $0.publicKey == publicKey) }
+        trainers.append(NearbyTrainer(id: peer, isCompatible: compatible, publicKey: publicKey, isActive: active))
         trainers.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
@@ -291,6 +337,7 @@ final class NearbyBattleService {
                                         opponent: opponent, language: language,
                                         mySide: match.mySide, opponentName: match.opponentName,
                                         turnTimeLimit: .seconds(60), names: names)
+            session.opponentKey = match.opponentKey
             session.board = match.board.map { BattleBoardRef(id: $0.boardId, name: boardName($0.boardId) ?? "") }
             link.onInterrupt = { [weak session] error in session?.opponentInterrupted(error) }
             session.onFinish = { [weak self] outcome in

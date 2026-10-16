@@ -20,11 +20,11 @@ final class BattleSpectatorHub {
 
 /// What a spectator sees: the battle window's view of the field, never `BattleState` itself (its RNG
 /// would let the page predict the battle). Built from the paced `display`, so it keeps the window's tempo.
-struct BattleSpectatorSnapshot: Encodable, Equatable, Sendable {
-    enum Kind: String, Encodable, Sendable { case practice, nearby }
-    enum Status: String, Encodable, Sendable { case psn, tox, brn, par, slp, frz }
+struct BattleSpectatorSnapshot: Codable, Equatable, Sendable {
+    enum Kind: String, Codable, Sendable { case practice, nearby }
+    enum Status: String, Codable, Sendable { case psn, tox, brn, par, slp, frz }
 
-    struct Pokemon: Encodable, Equatable, Sendable {
+    struct Pokemon: Codable, Equatable, Sendable {
         let speciesNum: Int
         let appearance: Int
         let name: String
@@ -35,16 +35,35 @@ struct BattleSpectatorSnapshot: Encodable, Equatable, Sendable {
         let maxHp: Int
         let status: Status?
         let fainted: Bool
+
+        private enum CodingKeys: String, CodingKey {
+            case speciesNum, appearance, name, level, shiny, unownForm, hp, maxHp, status, fainted
+        }
+
+        /// Explicit nulls, like the page's types: a synthesized encoder leaves nil out.
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(speciesNum, forKey: .speciesNum)
+            try c.encode(appearance, forKey: .appearance)
+            try c.encode(name, forKey: .name)
+            try c.encode(level, forKey: .level)
+            try c.encode(shiny, forKey: .shiny)
+            try c.encode(unownForm, forKey: .unownForm)
+            try c.encode(hp, forKey: .hp)
+            try c.encode(maxHp, forKey: .maxHp)
+            try c.encode(status, forKey: .status)
+            try c.encode(fainted, forKey: .fainted)
+        }
     }
 
-    struct Side: Encodable, Equatable, Sendable {
+    struct Side: Codable, Equatable, Sendable {
         let trainer: String
         let isYou: Bool
         let active: Int
         let team: [Pokemon]
     }
 
-    struct Move: Encodable, Equatable, Sendable {
+    struct Move: Codable, Equatable, Sendable {
         let name: String
         let type: String
         let pp: Int
@@ -52,7 +71,7 @@ struct BattleSpectatorSnapshot: Encodable, Equatable, Sendable {
         let usable: Bool
     }
 
-    struct Board: Encodable, Equatable, Sendable {
+    struct Board: Codable, Equatable, Sendable {
         let id: String
         let name: String
     }
@@ -69,6 +88,23 @@ struct BattleSpectatorSnapshot: Encodable, Equatable, Sendable {
     let outcome: String?
     /// Unix ms.
     let turnDeadline: Int?
+
+    private enum CodingKeys: String, CodingKey { case id, kind, board, sides, moves, message, log, turn, outcome, turnDeadline }
+
+    /// Explicit nulls: the page tells a live battle by `outcome === null`, and a missing key isn't null.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(kind, forKey: .kind)
+        try c.encode(board, forKey: .board)
+        try c.encode(sides, forKey: .sides)
+        try c.encode(moves, forKey: .moves)
+        try c.encode(message, forKey: .message)
+        try c.encode(log, forKey: .log)
+        try c.encode(turn, forKey: .turn)
+        try c.encode(outcome, forKey: .outcome)
+        try c.encode(turnDeadline, forKey: .turnDeadline)
+    }
 
     @MainActor
     static func make(from session: BattleSession, id: String, trainerName: String) -> BattleSpectatorSnapshot {

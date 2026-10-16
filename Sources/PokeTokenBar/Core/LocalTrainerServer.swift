@@ -175,6 +175,8 @@ final class LocalTrainerServer {
         case .trainer: return "trainer"
         case .battle: return "battle"
         case .boards: return "boards"
+        case .history: return "history"
+        case .trainers: return "trainers"
         }
     }
 }

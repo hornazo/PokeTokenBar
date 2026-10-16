@@ -248,6 +248,23 @@ final class BattleSpectatorTests: XCTestCase {
         XCTAssertEqual(LocalAPIPayloads.encode(LocalAPIPayloads.Battle(battle: nil)), Data("{\"battle\":null}".utf8))
     }
 
+    /// A live battle has no outcome, deadline or board yet; the page needs those as null, not missing.
+    func testLiveSnapshotsSendExplicitNulls() throws {
+        let session = BattleSession(myTeam: try BattleTeam(members: [mon("red0", hp: 60)]),
+                                    opponentTeam: try BattleTeam(members: [mon("blue0", hp: 55)]),
+                                    seed: 7, opponent: CPUOpponent(seed: 3), language: .en, pace: .zero)
+        let snapshot = BattleSpectatorSnapshot.make(from: session, id: "b1", trainerName: "Ash")
+        XCTAssertNil(snapshot.outcome)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: LocalAPIPayloads.encode(LocalAPIPayloads.Battle(battle: snapshot)))
+                                 as? [String: Any])
+        let battle = try XCTUnwrap(json["battle"] as? [String: Any])
+        for key in ["outcome", "turnDeadline", "board"] { XCTAssertTrue(battle[key] is NSNull, key) }
+        let pokemon = try XCTUnwrap(((battle["sides"] as? [[String: Any]])?.first?["team"] as? [[String: Any]])?.first)
+        for key in ["unownForm", "status"] { XCTAssertTrue(pokemon[key] is NSNull, key) }
+        // And it still reads back, for the battle history.
+        XCTAssertEqual(try JSONDecoder().decode(BattleSpectatorSnapshot.self, from: JSONEncoder().encode(snapshot)), snapshot)
+    }
+
     func testBadPoisonIsItsOwnStatus() {
         XCTAssertEqual(BattleSpectatorSnapshot.status(.badPoison), .tox)
         XCTAssertEqual(BattleSpectatorSnapshot.status(.poison), .psn)

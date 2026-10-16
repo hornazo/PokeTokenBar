@@ -57,6 +57,26 @@ final class BoardStoreTests: XCTestCase {
         }
     }
 
+    func testOneLeagueAtATime() async throws {
+        let ash = store(1, file: "a.json"), misty = store(2, file: "m.json")
+        let kanto = try await ash.create(name: "Kanto", displayName: "Ash", stats: stats)
+        let johto = try await misty.create(name: "Johto", displayName: "Misty", stats: stats)
+        do { try await ash.join(code: johto.display, displayName: "Ash", stats: stats); XCTFail() } catch {
+            XCTAssertEqual(error as? BoardStore.StoreError, .alreadyJoined)
+        }
+        do { _ = try await ash.create(name: "Hoenn", displayName: "Ash", stats: stats); XCTFail() } catch {
+            XCTAssertEqual(error as? BoardStore.StoreError, .alreadyJoined)
+        }
+        XCTAssertEqual(ash.boards.map(\.id), [kanto.boardId])
+
+        // Leaving frees the slot even while the tombstone still waits for a sync.
+        clock += 1
+        await ash.leave(kanto.boardId)
+        try await ash.join(code: johto.display, displayName: "Ash", stats: stats)
+        XCTAssertEqual(ash.boards.map(\.id), [johto.boardId])
+        XCTAssertEqual(Set(ash.codes), [kanto, johto])
+    }
+
     func testPublishSignsOnlyWhenSomethingChanged() async throws {
         let ash = store(1)
         let code = try await ash.create(name: "Kanto", displayName: "Ash", stats: stats)

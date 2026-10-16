@@ -20,6 +20,19 @@ enum AppEnv {
         ProcessInfo.processInfo.environment["PTB_DEBUG_BOARD"]
     }
 
+    /// `PTB_DEBUG_VISIBLE=1` — visible to trainers nearby from launch, for the two-instance QA run (debug only).
+    static var debugVisible: Bool {
+        ProcessInfo.processInfo.environment["PTB_DEBUG_VISIBLE"] == "1"
+    }
+
+    /// `PTB_DEBUG_IDLE` — overrides whether this instance reports its user as idle to trainers nearby:
+    /// `1` idle, `0` active, or a file path, idle while that file exists. nil when unset (debug builds only read it).
+    static var debugIdle: Bool? {
+        guard let value = ProcessInfo.processInfo.environment["PTB_DEBUG_IDLE"], !value.isEmpty else { return nil }
+        if value == "1" || value == "0" { return value == "1" }
+        return FileManager.default.fileExists(atPath: value)
+    }
+
     /// Lets a test drive a provider's real network code against a stubbed transport (URLProtocol, an
     /// injected URLSession). Set it in the test and reset it in `defer`.
     nonisolated(unsafe) static var allowLiveFetchForTesting = false

@@ -1,7 +1,8 @@
 import CryptoKit
 import Foundation
 
-/// The boards this trainer is in, with each board's replica, kept in `boards.json` next to the save.
+/// The league (a board) this trainer is in, with its replica, kept in `boards.json` next to the save. One at a
+/// time, so nobody battles themselves for points on two boards; a save from before that rule may hold several.
 /// Board sync merges what peers send; the app re-signs our own rows when our stats change.
 @MainActor @Observable
 final class BoardStore {
@@ -27,7 +28,11 @@ final class BoardStore {
 
     static let shared = BoardStore()
 
-    enum StoreError: Error, Equatable { case invalidCode, alreadyJoined, invalidName }
+    enum StoreError: Error, Equatable {
+        case invalidCode, invalidName
+        /// Already in a league: this one or another.
+        case alreadyJoined
+    }
 
     /// Every board we hold, including ones we left that still have a tombstone to deliver.
     private(set) var all: [Board] = []
@@ -59,6 +64,7 @@ final class BoardStore {
     func create(name rawName: String, displayName: String, stats: BoardStats) async throws -> BoardCode {
         let name = Self.sanitizedName(rawName)
         guard !name.isEmpty else { throw StoreError.invalidName }
+        guard boards.isEmpty else { throw StoreError.alreadyJoined }
         let code = BoardCode.random()
         try await add(code: code, boardName: name, displayName: displayName, stats: stats)
         return code
@@ -67,14 +73,14 @@ final class BoardStore {
     #if DEBUG
     /// QA only (`PTB_DEBUG_BOARD`): a board with a known code, so two instances can share it unattended.
     func createForTesting(code: BoardCode, name: String, displayName: String, stats: BoardStats) async throws {
-        guard board(code.boardId) == nil else { return }
+        guard boards.isEmpty else { return }
         try await add(code: code, boardName: name, displayName: displayName, stats: stats)
     }
     #endif
 
     func join(code raw: String, displayName: String, stats: BoardStats) async throws {
         guard let code = BoardCode(raw) else { throw StoreError.invalidCode }
-        guard board(code.boardId) == nil else { throw StoreError.alreadyJoined }
+        guard boards.isEmpty else { throw StoreError.alreadyJoined }
         try await add(code: code, boardName: "", displayName: displayName, stats: stats)
     }
 
@@ -85,7 +91,8 @@ final class BoardStore {
         replica.merge(try BoardRecord.signed(boardId: code.boardId, boardName: boardName, displayName: Self.sanitizedName(displayName),
                                              stats: stats, joinedAt: joinedAt, issuedAt: joinedAt, left: false, key: key),
                       now: joinedAt)
-        guard board(code.boardId) == nil else { throw StoreError.alreadyJoined }
+        // Checked again: another create or join may have finished while the key loaded.
+        guard boards.isEmpty else { throw StoreError.alreadyJoined }
         all.removeAll { $0.id == code.boardId }   // rejoining a board we left
         all.append(Board(code: code.value, joinedAt: joinedAt, replica: replica))
         changed()

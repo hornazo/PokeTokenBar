@@ -24,23 +24,7 @@ struct BoardsSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(boards.boards) { board in row(board) }
-            HStack(spacing: 6) {
-                TextField(l.boardsNamePlaceholder, text: $newName)
-                    .textFieldStyle(.roundedBorder).controlSize(.small)
-                    .onSubmit(create)
-                Button(l.boardsCreate, action: create)
-                    .controlSize(.small)
-                    .disabled(working || BoardStore.sanitizedName(newName).isEmpty)
-            }
-            HStack(spacing: 6) {
-                TextField(l.boardsCodePlaceholder, text: $code)
-                    .textFieldStyle(.roundedBorder).controlSize(.small)
-                    .font(.system(.callout, design: .monospaced))
-                    .onSubmit(join)
-                Button(l.boardsJoin, action: join)
-                    .controlSize(.small)
-                    .disabled(working || code.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
+            if boards.boards.isEmpty { joinControls }
             if let error {
                 Text(error).font(.caption2).foregroundStyle(.red)
             }
@@ -65,6 +49,29 @@ struct BoardsSection: View {
         }
     }
 
+    /// Create or join: only while not in a league.
+    private var joinControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                TextField(l.boardsNamePlaceholder, text: $newName)
+                    .textFieldStyle(.roundedBorder).controlSize(.small)
+                    .onSubmit(create)
+                Button(l.boardsCreate, action: create)
+                    .controlSize(.small)
+                    .disabled(working || BoardStore.sanitizedName(newName).isEmpty)
+            }
+            HStack(spacing: 6) {
+                TextField(l.boardsCodePlaceholder, text: $code)
+                    .textFieldStyle(.roundedBorder).controlSize(.small)
+                    .font(.system(.callout, design: .monospaced))
+                    .onSubmit(join)
+                Button(l.boardsJoin, action: join)
+                    .controlSize(.small)
+                    .disabled(working || code.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
     private func row(_ board: BoardStore.Board) -> some View {
         let standings = BoardScoring.standings(board.replica)
         let me = context.publicKey.flatMap { key in standings.first { $0.record.publicKey == key } }
@@ -84,10 +91,7 @@ struct BoardsSection: View {
             }
             Spacer(minLength: 4)
             Menu {
-                Button(l.boardsCopyCode) {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(board.boardCode.display, forType: .string)
-                }
+                Button(l.boardsCopyCode) { copyCode(board) }
                 Divider()
                 Button(l.boardsLeave, role: .destructive) { leaving = board }
             } label: {
@@ -96,6 +100,13 @@ struct BoardsSection: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
         }
+        .contentShape(Rectangle())
+        .contextMenu { Button(l.boardsCopyCode) { copyCode(board) } }
+    }
+
+    private func copyCode(_ board: BoardStore.Board) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(board.boardCode.display, forType: .string)
     }
 
     private func syncText(_ board: BoardStore.Board) -> String {

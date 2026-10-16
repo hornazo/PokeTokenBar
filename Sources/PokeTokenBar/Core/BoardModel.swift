@@ -67,12 +67,60 @@ struct BoardStats: Codable, Equatable, Sendable {
         var teamTotal = 0
         var top = 0
     }
+    /// One battle team slot, as other members see it.
+    struct TeamMember: Codable, Equatable, Sendable {
+        let speciesNum: Int
+        /// In the trainer's own language.
+        let species: String
+        let form: String?
+        let shiny: Bool
+        let level: Int
+
+        var isPlausible: Bool {
+            (1...1_100).contains(speciesNum) && (1...100).contains(level)
+                && (1...BoardRules.maxNameLength).contains(species.count) && (form?.count ?? 0) <= 16
+        }
+    }
+
     var collection = Collection()
     var levels = Levels()
     /// Only when the trainer opted in.
     var aiBand: WeeklyUsageBand?
     /// Self-reported and shown, never scored: battle points come from co-signed receipts.
     var battleRecord = BattleRecord()
+    /// The battle team in slot order, lead first.
+    var team: [TeamMember] = []
+
+    init(collection: Collection = Collection(), levels: Levels = Levels(), aiBand: WeeklyUsageBand? = nil,
+         battleRecord: BattleRecord = BattleRecord(), team: [TeamMember] = []) {
+        self.collection = collection
+        self.levels = levels
+        self.aiBand = aiBand
+        self.battleRecord = battleRecord
+        self.team = team
+    }
+
+    private enum CodingKeys: String, CodingKey { case collection, levels, aiBand, battleRecord, team }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        collection = try c.decode(Collection.self, forKey: .collection)
+        levels = try c.decode(Levels.self, forKey: .levels)
+        aiBand = try c.decodeIfPresent(WeeklyUsageBand.self, forKey: .aiBand)
+        battleRecord = try c.decode(BattleRecord.self, forKey: .battleRecord)
+        team = try c.decodeIfPresent([TeamMember].self, forKey: .team) ?? []
+    }
+
+    /// Rows are signed over this encoding: an empty team leaves it out, so rows signed before teams
+    /// existed still verify.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(collection, forKey: .collection)
+        try c.encode(levels, forKey: .levels)
+        try c.encodeIfPresent(aiBand, forKey: .aiBand)
+        try c.encode(battleRecord, forKey: .battleRecord)
+        if !team.isEmpty { try c.encode(team, forKey: .team) }
+    }
 
     var isPlausible: Bool {
         let c = collection, r = battleRecord
@@ -80,6 +128,7 @@ struct BoardStats: Codable, Equatable, Sendable {
             && c.dex <= 100_000 && c.species <= 1_100 && c.shinies <= c.dex && c.graduated <= c.dex
             && levels.top <= 100 && levels.teamTotal <= 600
             && r.wins <= 1_000_000 && r.losses <= 1_000_000 && r.draws <= 1_000_000
+            && team.count <= 6 && team.allSatisfy(\.isPlausible)
     }
 }
 

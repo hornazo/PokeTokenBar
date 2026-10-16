@@ -16,6 +16,13 @@ final class TrainerPageCoordinator {
     private let boards = BoardStore.shared
     private let sync = BoardSyncService.shared
     private let hub = BattleSpectatorHub.shared
+    private let history = BattleHistoryStore.shared
+    private var recorder = BattleHistoryRecorder()
+    private let nearby = NearbyBattleService.shared
+    private let sightings = TrainerSightingsStore.shared
+    /// Checks whether the user is at the keyboard, and keeps sightings of trainers still in view fresh.
+    private var presenceTimer: Timer?
+    static let presenceInterval: TimeInterval = 30
 
     /// Origins being asked about, or turned down during this run (asked again next launch).
     private var asking: Set<String> = []
@@ -54,6 +61,7 @@ final class TrainerPageCoordinator {
             guard let self else { return }
             self.sync.update(enabled: self.settings.boardSync)
             self.broadcast(.boards)
+            self.broadcast(.trainers)
         }
         observe({ [weak self] in
             guard let session = self?.hub.current else { return }
@@ -62,7 +70,24 @@ final class TrainerPageCoordinator {
             _ = session.log
             _ = session.outcome
             _ = session.turnDeadline
-        }) { [weak self] in self?.broadcast(.battle) }
+        }) { [weak self] in
+            self?.recordFinishedBattle()
+            self?.broadcast(.battle)
+        }
+        observe({ [weak self] in _ = self?.history.revision }) { [weak self] in
+            self?.broadcast(.history)
+            self?.broadcast(.trainers)
+        }
+        observe({ [weak self] in _ = self?.nearby.trainers }) { [weak self] in
+            self?.noteSightings()
+            self?.broadcast(.trainers)
+        }
+        observe({ [weak self] in _ = self?.sightings.revision }) { [weak self] in self?.broadcast(.trainers) }
+        presenceTimer = Timer.scheduledTimer(withTimeInterval: Self.presenceInterval, repeats: true) { _ in
+            MainActor.assumeIsolated { [weak self] in self?.checkPresence() }
+        }
+        presenceTimer?.tolerance = 10
+        checkPresence()
         schedulePublish()
         #if DEBUG
         joinDebugBoard()
@@ -78,6 +103,10 @@ final class TrainerPageCoordinator {
         Task {
             try? await boards.createForTesting(code: code, name: name, displayName: context.displayName, stats: context.boardStats())
             sync.update(enabled: settings.boardSync)
+        }
+        if AppEnv.debugVisible {
+            nearby.configure(trainer: context.displayName, team: nil, language: .en, names: { _ in nil })
+            nearby.start()
         }
     }
     #endif
@@ -103,7 +132,48 @@ final class TrainerPageCoordinator {
             return LocalAPIPayloads.encode(LocalAPIPayloads.Battle(battle: snapshot))
         case .boards:
             return LocalAPIPayloads.encode(LocalAPIPayloads.boards(boards.boards, you: context.publicKey, syncEnabled: settings.boardSync))
+        case .history:
+            return LocalAPIPayloads.encode(LocalAPIPayloads.History(battles: history.entries))
+        case .trainers:
+            return LocalAPIPayloads.encode(LocalAPIPayloads.Trainers(trainers: trainerList()))
         }
+    }
+
+    /// Saves the battle on screen once it has an outcome, whether or not the page is on.
+    private func recordFinishedBattle() {
+        let session = hub.current
+        guard recorder.shouldRecord(session: session.map(ObjectIdentifier.init), finished: session?.outcome != nil),
+              let session else { return }
+        let snapshot = BattleSpectatorSnapshot.make(from: session, id: hub.battleId, trainerName: context.displayName)
+        history.add(.make(snapshot, finishedAt: BoardRules.now(), opponentKey: session.opponentKey))
+    }
+
+    // MARK: Presence
+
+    private var nearbyWithKeys: [TrainerList.Nearby] {
+        nearby.trainers.compactMap { t in t.publicKey.map { TrainerList.Nearby(publicKey: $0, name: t.name, active: t.isActive) } }
+    }
+
+    private func noteSightings() {
+        sightings.saw(nearbyWithKeys, at: BoardRules.now())
+    }
+
+    private func checkPresence() {
+        let anyInput = CGEventType(rawValue: ~0)!
+        var idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput)
+        #if DEBUG
+        if let forced = AppEnv.debugIdle { idle = forced ? .infinity : 0 }
+        #endif
+        nearby.setUserActive(UserActivity.isActive(idleSeconds: idle))
+        noteSightings()
+    }
+
+    private func trainerList() -> [TrainerListEntry] {
+        // Until our key loads we can't leave ourselves out of the league's rows.
+        guard context.publicKey != nil else { return [] }
+        let league = boards.boards.first.map { TrainerList.League(id: $0.id, name: $0.name, replica: $0.replica) }
+        return TrainerList.build(you: context.publicKey, league: league, sightings: Array(sightings.sightings.values),
+                                 nearby: nearbyWithKeys, history: history.entries, now: BoardRules.now())
     }
 
     private func broadcast(_ endpoint: LocalHTTP.Endpoint) {
@@ -147,7 +217,7 @@ final class TrainerPageCoordinator {
         guard case .join(let code) = BoardDeepLink.parse(url) else { return false }
         let l = L(context.companion?.language ?? .en)
         NSApp.activate(ignoringOtherApps: true)
-        if boards.board(code.boardId) != nil {
+        if !boards.boards.isEmpty {
             let alert = NSAlert()
             alert.messageText = l.boardsAlreadyJoined
             alert.runModal()

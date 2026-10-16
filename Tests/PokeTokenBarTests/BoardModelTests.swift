@@ -70,6 +70,26 @@ final class BoardModelTests: XCTestCase {
         "stats":{"battleRecord":{"draws":0,"losses":0,"wins":0},"collection":{"dex":0,"graduated":0,"shinies":0,"species":0},\
         "levels":{"teamTotal":0,"top":0}}}
         """)
+        let team = BoardStats(team: [.init(speciesNum: 25, species: "Pikachu", form: nil, shiny: true, level: 40)])
+        let withTeam = BoardRecord.message(boardId: "b", boardName: "Kanto", publicKey: "k", displayName: "Ash",
+                                           stats: team, joinedAt: 1, issuedAt: 2, left: false)
+        XCTAssertTrue(String(decoding: withTeam, as: UTF8.self).hasSuffix("""
+        "levels":{"teamTotal":0,"top":0},"team":[{"level":40,"shiny":true,"species":"Pikachu","speciesNum":25}]}}
+        """))
+    }
+
+    func testRowsFromBeforeTeamsStillLoadAndVerify() throws {
+        let old = Data("""
+        {"battleRecord":{"draws":0,"losses":1,"wins":2},"collection":{"dex":3,"graduated":0,"shinies":0,"species":2},\
+        "levels":{"teamTotal":40,"top":40}}
+        """.utf8)
+        let stats = try JSONDecoder().decode(BoardStats.self, from: old)
+        XCTAssertEqual(stats.team, [])
+        XCTAssertEqual(stats.battleRecord.wins, 2)
+        // An empty team signs the same bytes as before, so rows signed by older builds still verify.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        XCTAssertEqual(try encoder.encode(stats), old)
     }
 
     func testRecordsSurviveAJSONRoundTripWithTheirSignature() throws {
@@ -92,7 +112,16 @@ final class BoardModelTests: XCTestCase {
         XCTAssertFalse(replica.merge(record(1, joined: 3_000, issued: 2_000), now: now))
         XCTAssertFalse(replica.merge(record(1, name: "   "), now: now))
         XCTAssertFalse(replica.merge(record(1, name: String(repeating: "a", count: 33)), now: now))
+        let pikachu = BoardStats.TeamMember(speciesNum: 25, species: "Pikachu", form: nil, shiny: false, level: 40)
+        for bad in [BoardStats.TeamMember(speciesNum: 0, species: "Missingno", form: nil, shiny: false, level: 40),
+                    .init(speciesNum: 25, species: "Pikachu", form: nil, shiny: false, level: 101),
+                    .init(speciesNum: 25, species: "", form: nil, shiny: false, level: 40),
+                    .init(speciesNum: 201, species: "Unown", form: String(repeating: "a", count: 17), shiny: false, level: 40)] {
+            XCTAssertFalse(replica.merge(record(1, stats: BoardStats(team: [bad])), now: now), "\(bad)")
+        }
+        XCTAssertFalse(replica.merge(record(1, stats: BoardStats(team: Array(repeating: pikachu, count: 7))), now: now))
         XCTAssertTrue(replica.records.isEmpty)
+        XCTAssertTrue(record(1, stats: BoardStats(team: Array(repeating: pikachu, count: 6))).isAcceptable(for: boardId, now: now))
         XCTAssertTrue(replica.merge(good, now: now))
     }
 
@@ -200,15 +229,21 @@ final class BoardModelTests: XCTestCase {
                       level: 12, ability: nil, moves: [], caughtAt: nil, status: .released),
                 .init(instanceId: "c", speciesNum: 1, species: "Bulbasaur", form: nil, shiny: false, nature: nil, gender: nil,
                       level: 55, ability: nil, moves: [], caughtAt: nil, status: .active),
+                .init(instanceId: "d", speciesNum: 201, species: "", form: "A", shiny: false, nature: nil, gender: nil,
+                      level: 5, ability: nil, moves: [], caughtAt: nil, status: .active),
             ],
-            battleTeam: ["c", "a", "missing"], battleRecord: BattleRecord(wins: 2, losses: 1, draws: 0),
+            battleTeam: ["c", "a", "missing", "d"], battleRecord: BattleRecord(wins: 2, losses: 1, draws: 0),
             gameStats: TrainerShowcase.stats([]))
         let stats = BoardStats(showcase: TrainerShowcase(pokemon: showcase.pokemon, battleTeam: showcase.battleTeam,
                                                           battleRecord: showcase.battleRecord,
                                                           gameStats: TrainerShowcase.stats(showcase.pokemon)),
                                aiBand: nil)
-        XCTAssertEqual(stats.collection, .init(dex: 3, species: 2, shinies: 1, graduated: 1))
-        XCTAssertEqual(stats.levels, .init(teamTotal: 95, top: 55))
+        XCTAssertEqual(stats.collection, .init(dex: 4, species: 3, shinies: 1, graduated: 1))
+        XCTAssertEqual(stats.levels, .init(teamTotal: 100, top: 55))
+        // Slot order, and a slot other members would reject (no species name yet) is left out.
+        XCTAssertEqual(stats.team, [.init(speciesNum: 1, species: "Bulbasaur", form: nil, shiny: false, level: 55),
+                                    .init(speciesNum: 25, species: "Pikachu", form: nil, shiny: true, level: 40)])
+        XCTAssertTrue(stats.isPlausible)
         XCTAssertNil(stats.aiBand)
         XCTAssertEqual(stats.battleRecord.wins, 2)
     }

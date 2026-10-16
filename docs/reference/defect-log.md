@@ -632,6 +632,11 @@ read_when:
   이겼다(`BoardReplica.name` 은 가장 이른 멤버의 이름을 쓴다). 모르는 값은 빈 값으로 서명하고, 읽는 쪽이
   빈 값을 후보에서 뺀다. 자리표시자는 표시할 때만 만든다. 회귀:
   `testCreateThenJoinAndSyncNamesTheBoardForTheJoiner`.
+- **로컬 API 의 옵셔널은 `null` 을 명시해 인코딩한다.** 합성된 `Encodable` 은 nil 키를 아예 빼는데, 페이지는
+  `outcome === null` 로 진행 중인 배틀을 판별해 실제 앱에선 라이브 표시와 턴 타이머가 한 번도 뜨지 않았다.
+  웹 테스트와 `dev/mock-app.mjs` 는 TS 타입대로 `null` 을 넣은 픽스처로 통과했고, Swift 쪽은 키 존재를 검사하지
+  않았다. 페이지 타입이 `T | null` 인 필드는 `encode(to:)` 에서 `encode` 로 쓴다(`encodeIfPresent` 금지). 회귀:
+  `testLiveSnapshotsSendExplicitNulls`.
 
 ## 프로세스·인스턴스
 

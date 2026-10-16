@@ -102,6 +102,8 @@ final class BattleSession {
     var onFinish: ((Outcome) -> Void)?
     /// The board a nearby battle counts for; nil for practice and friendlies.
     var board: BattleBoardRef?
+    /// The opponent's board key, when a nearby opponent sent one; kept with the battle in the history.
+    var opponentKey: String?
 
     private let myTeam: BattleTeam
     private let opponentTeam: BattleTeam
