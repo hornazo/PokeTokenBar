@@ -21,6 +21,9 @@
 
 </div>
 
+> [!NOTE]
+> **하드 포크.** 이 저장소는 [chattymin/PokeTokenBar](https://github.com/chattymin/PokeTokenBar) 의 비공개 독립 사본으로, 업스트림 PR [#362](https://github.com/chattymin/PokeTokenBar/pull/362) 의 근처 배틀을 기반으로 합니다. GitHub 포크가 아니며 업스트림을 자동으로 따라가지 않고, 필요한 변경만 직접 병합합니다. 근처 Mac 끼리 동기화되는 리그, 배틀 기록, 트레이너 상태, `web/` 의 정적 트레이너 페이지용 로컬 API 를 추가했습니다([자세히](docs/reference/boards-and-trainer-page.md)). 배틀·리그 프로토콜은 업스트림 빌드와 호환되지 않으며, 아래의 릴리스·Homebrew·후원 링크는 업스트림을 가리킵니다.
+
 PokeTokenBar는 당신이 이미 태우고 있는 AI 코딩 토큰(Claude Code · Codex · Gemini CLI · Antigravity · OpenCode · Hermes Agent · Cursor · Grok CLI · Copilot CLI · Kiro CLI · Pi Agent · omp · Aside)을 macOS 메뉴바 속 자라나는 **포켓몬 companion**으로 바꿔줍니다. 토큰을 쓰면 알이 부화하고, 실제 진화 라인을 따라 진화하며, 최종 진화 후 도감에 졸업하고, 다시 새 알이 시작됩니다. companion 아래에는 정확한 사용량 트래커가 있습니다 — 오늘의 사용량·비용, 공식 5시간/주간 한도를 로컬 로그에서 직접 읽습니다.
 
 > 토큰 사용량은 로컬 Claude Code·Codex·Gemini CLI·Antigravity·OpenCode·Hermes Agent·Cursor·Grok CLI·Copilot CLI·Kiro CLI·Pi Agent·omp·Aside 데이터에서 직접 읽습니다(`totalTokens` = input + output + cache, 로컬 날짜) — 외부 CLI 불필요. 비공식·비상업 포켓몬 팬 프로젝트 — [라이선스 & 면책](#라이선스--면책) 참고.

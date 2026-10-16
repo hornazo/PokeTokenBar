@@ -21,6 +21,9 @@
 
 </div>
 
+> [!NOTE]
+> **ハードフォーク。** このリポジトリは [chattymin/PokeTokenBar](https://github.com/chattymin/PokeTokenBar) の非公開の独立したコピーで、アップストリーム PR [#362](https://github.com/chattymin/PokeTokenBar/pull/362) の近くのバトルを土台にしています。GitHub のフォークではなく、アップストリームには自動で追従せず、必要な変更だけを手動で取り込みます。近くの Mac 同士で同期するリーグ、バトル履歴、トレーナーの在席状況、`web/` の静的トレーナーページ用ローカル API を追加しています（[詳細](docs/reference/boards-and-trainer-page.md)）。バトルとリーグのプロトコルはアップストリームのビルドと互換性がなく、以下のリリース・Homebrew・スポンサーのリンクはアップストリームを指します。
+
 PokeTokenBar は、あなたがすでに使っている AI コーディングトークン（Claude Code・Codex・Gemini CLI・Antigravity・OpenCode・Hermes Agent・Cursor・Grok CLI・Copilot CLI・Kiro CLI・Pi Agent・omp・Aside）を、macOS メニューバーの中で育っていく **ポケモンのパートナー** に変えます。トークンを使うとタマゴが孵化し、実際の進化ラインに沿って進化し、最終進化後に図鑑へ卒業して、また新しいタマゴが始まります。パートナーの下には正確な使用量トラッカーがあります — 今日の使用量・コスト、公式の5時間／週間上限をローカルログから直接読み取ります。
 
 > トークン使用量はローカルの Claude Code・Codex・Gemini CLI・Antigravity・OpenCode・Hermes Agent・Cursor・Grok CLI・Copilot CLI・Kiro CLI・Pi Agent・omp・Aside データから直接読み取ります（`totalTokens` = input + output + cache、ローカル日付）— 外部 CLI 不要。非公式・非商用のポケモンファンプロジェクトです — [ライセンス & 免責](#ライセンス--免責) を参照。
