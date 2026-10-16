@@ -15,6 +15,8 @@ struct BoardsSection: View {
     @State private var error: String?
     @State private var leaving: BoardStore.Board?
     @State private var working = false
+    /// The board whose code was just copied, shown as "Copied" for a moment.
+    @State private var copied: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -95,18 +97,24 @@ struct BoardsSection: View {
                 Divider()
                 Button(l.boardsLeave, role: .destructive) { leaving = board }
             } label: {
-                Text(board.boardCode.display).font(.system(.caption2, design: .monospaced))
+                Text(copied == board.id ? l.boardsCopied : board.boardCode.display).font(.system(.caption2, design: .monospaced))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
         }
         .contentShape(Rectangle())
-        .contextMenu { Button(l.boardsCopyCode) { copyCode(board) } }
+        .overlay(RightClickCatcher { copyCode(board) })
+        .help(l.boardsCopyHint)
     }
 
     private func copyCode(_ board: BoardStore.Board) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(board.boardCode.display, forType: .string)
+        copied = board.id
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            if copied == board.id { copied = nil }
+        }
     }
 
     private func syncText(_ board: BoardStore.Board) -> String {

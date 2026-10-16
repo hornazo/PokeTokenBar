@@ -1940,6 +1940,8 @@ extension L {
         t("\(points)점", "\(points) pts", "\(points)pt", "\(points) pts", "\(points) pts", "\(points) pts", "\(points) Pkt.")
     }
     var boardsCopyCode: String { t("코드 복사", "Copy code", "コードをコピー", "Copiar código", "Copier le code", "Copiar código", "Code kopieren") }
+    var boardsCopied: String { t("복사됨", "Copied", "コピーしました", "Copiado", "Copié", "Copiado", "Kopiert") }
+    var boardsCopyHint: String { t("우클릭하면 초대 코드를 복사해요", "Right-click to copy the invite code", "右クリックで招待コードをコピー", "Clic derecho para copiar el código de invitación", "Clic droit pour copier le code d’invitation", "Clique com o botão direito para copiar o código de convite", "Rechtsklick kopiert den Einladungscode") }
     var boardsLeave: String { t("나가기", "Leave", "退出", "Salir", "Quitter", "Sair", "Verlassen") }
     func boardsLeaveConfirm(_ name: String) -> String {
         t("\(name)에서 나갈까요? 코드가 있으면 다시 참가할 수 있어요.", "Leave \(name)? You can rejoin with its code.", "\(name)から退出しますか？コードがあれば再参加できます。", "¿Salir de \(name)? Puedes volver con su código.", "Quitter \(name) ? Tu pourras revenir avec son code.", "Sair de \(name)? Dá para voltar com o código.", "\(name) verlassen? Mit dem Code kannst du wieder beitreten.")
