@@ -3,7 +3,7 @@ import Foundation
 
 /// Syncs boards with Macs nearby over MultipeerConnectivity, apart from battles (`_ptb-battle`) so each
 /// keeps its own protocol version and prompts. Connections need no prompt: they only ever carry boards,
-/// and a peer proves each board before seeing anything about it (`BoardSyncSession`).
+/// whose standings are public; rows prove their own membership (`BoardSyncSession`).
 @MainActor @Observable
 final class BoardSyncService {
     /// Bonjour service type; must match `NSBonjourServices` in the app's Info.plist.
@@ -45,7 +45,8 @@ final class BoardSyncService {
 
     /// Runs while sync is on and there is at least one board (left ones still deliver their tombstone).
     func update(enabled: Bool) {
-        let wanted = enabled && !(store?.codes.isEmpty ?? true)
+        // Without a league of our own we still watch everyone else's.
+        let wanted = enabled && store != nil
         if wanted, !isRunning { start() } else if !wanted, isRunning { stop() }
     }
 
@@ -102,9 +103,7 @@ final class BoardSyncService {
         guard let peerID, let store else { return nil }
         let session = MCSession(peer: peerID, securityIdentity: nil, encryptionPreference: .required)
         session.delegate = proxy
-        var replicas: [String: BoardReplica] = [:]
-        for code in store.codes { replicas[code.boardId] = store.replica(code.boardId) }
-        let connection = Connection(session: session, sync: BoardSyncSession(codes: store.codes, replicas: replicas))
+        let connection = Connection(session: session, sync: BoardSyncSession(replicas: store.syncReplicas))
         connection.timeout = Task { [weak self] in
             try? await Task.sleep(for: Self.sessionTimeout)
             guard !Task.isCancelled else { return }

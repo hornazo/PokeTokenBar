@@ -11,8 +11,8 @@ final class BoardModelTests: XCTestCase {
     private let now: Int64 = 1_760_000_000_000
 
     private func record(_ n: UInt8, name: String = "Ash", joined: Int64 = 1_000, issued: Int64 = 2_000, left: Bool = false,
-                        stats: BoardStats = BoardStats(), board: String? = nil, boardName: String = "Kanto") -> BoardRecord {
-        try! BoardRecord.signed(boardId: board ?? boardId, boardName: boardName, displayName: name, stats: stats,
+                        stats: BoardStats = BoardStats(), other: BoardCode? = nil, boardName: String = "Kanto") -> BoardRecord {
+        try! BoardRecord.signed(code: other ?? code, boardName: boardName, displayName: name, stats: stats,
                                 joinedAt: joined, issuedAt: issued, left: left, key: key(n))
     }
 
@@ -42,6 +42,15 @@ final class BoardModelTests: XCTestCase {
         XCTAssertNotEqual(code.boardId, BoardCode("ABCDEFGHJKMP")!.boardId)
         XCTAssertEqual(code.proof("x"), BoardCode("abcd efgh jkmn")!.proof("x"))
         XCTAssertNotEqual(code.proof("x"), code.proof("y"))
+    }
+
+    /// Pinned: every build must derive the same public league for a code, or members split up.
+    func testLeagueKeyAndIdArePinned() throws {
+        XCTAssertEqual(code.leagueKey, "ZE_Hh-RmNubetMw-nAhR2V6D822FTDmrIGpB-KW0TFI")
+        XCTAssertEqual(code.boardId, "edd8fd140d4e81c5b2ae8a8cf113160ecf9bb8a63d530d1bec2cec03a9bededd")
+        XCTAssertEqual(code.legacyBoardId, "412aaafead3982bf2a0784e01739440d51e7adbf904a28db20c731469df9d202")
+        let member = TrainerSigning.encode(key(1).publicKey)
+        XCTAssertTrue(TrainerSigning.verify(try code.membership(for: member), of: BoardRecord.membershipMessage(boardId: code.boardId, publicKey: member), by: code.leagueKey))
     }
 
     func testFingerprintIsFourStableCrockfordCharacters() {
@@ -108,7 +117,7 @@ final class BoardModelTests: XCTestCase {
         XCTAssertFalse(replica.merge(record(1, stats: BoardStats(levels: .init(teamTotal: 601, top: 100))), now: now))
         XCTAssertFalse(replica.merge(record(1, stats: BoardStats(collection: .init(dex: 1, species: 1, shinies: 2))), now: now))
         XCTAssertFalse(replica.merge(record(1, issued: now + BoardRules.maxClockSkewMs + 1), now: now))
-        XCTAssertFalse(replica.merge(record(1, board: BoardCode("ABCDEFGHJKMP")!.boardId), now: now))
+        XCTAssertFalse(replica.merge(record(1, other: BoardCode("ABCDEFGHJKMP")!), now: now))
         XCTAssertFalse(replica.merge(record(1, joined: 3_000, issued: 2_000), now: now))
         XCTAssertFalse(replica.merge(record(1, name: "   "), now: now))
         XCTAssertFalse(replica.merge(record(1, name: String(repeating: "a", count: 33)), now: now))
@@ -161,7 +170,7 @@ final class BoardModelTests: XCTestCase {
 
     func testCapKeepsTheSameEarliestMembersEverywhere() {
         let rows = (1...(BoardRules.memberCap + 1)).map { n in
-            try! BoardRecord.signed(boardId: boardId, boardName: "Big", displayName: "T\(n)", stats: BoardStats(),
+            try! BoardRecord.signed(code: code, boardName: "Big", displayName: "T\(n)", stats: BoardStats(),
                                     joinedAt: Int64(n), issuedAt: Int64(n), left: false,
                                     key: Curve25519.Signing.PrivateKey())
         }

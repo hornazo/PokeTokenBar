@@ -9,8 +9,9 @@ read_when:
 
 # Boards and the trainer page
 
-No server holds any of this. Every member's app keeps a copy of its board, Macs nearby merge their
-copies, and a static page reads the app over `127.0.0.1`. The UI calls a board a league; code, files and
+No server holds any of this. Every app keeps a copy of its own board and of every other board it has
+seen, Macs nearby merge their copies, and a static page reads the app over `127.0.0.1`. Standings are
+public; only joining needs the code. The UI calls a board a league; code, files and
 the `_ptb-board` service keep the board name.
 
 ## Boards
@@ -18,8 +19,18 @@ the `_ptb-board` service keep the board name.
 - **One league per trainer.** `BoardStore.create`/`join` refuse while you're in one (`.alreadyJoined`);
   leaving frees the slot even before the tombstone is delivered. A save from before the rule may hold
   several boards; nothing merges or drops them.
-- **Code = membership.** The invite code (`XXXX-XXXX-XXXX`, 60 random bits) is the board's secret. The
-  board id is `SHA-256("ptb-board:" + code)`; proofs are `HMAC(code-derived key, context)`.
+- **Code = membership.** The invite code (`XXXX-XXXX-XXXX`, 60 random bits) is the board's secret. It
+  derives an Ed25519 board key (`BoardCode.signingKey`, seed `SHA-256("ptb-board-sign:" + code)`); the
+  board id is `SHA-256("ptb-board-v2:" + public board key)` (pinned in `testLeagueKeyAndIdArePinned`).
+  Every row carries the public board key and a membership: the board key's signature over the member's
+  key. Any Mac checks both against the board id, so holding rows without the code can't add a member.
+  Battle invites still prove the code with `HMAC(code-derived key, context)`.
+- **Watched boards.** Boards we're not in are kept read-only (`BoardStore.watched`) once a valid member
+  row arrives: at most 50, the most recently active first. Joining one keeps its rows; a board we left
+  becomes watched once its tombstone is out.
+- **Moving old saves.** Boards saved under the code-only id (`legacyBoardId`) move to the public id on
+  load with an empty replica and their name carried over; our row is re-signed on the next publish,
+  other members' rows come back when they run a build that signs memberships.
 - **Rows.** Each member signs their own row (`BoardRecord`: name, raw stats including the battle team,
   `joinedAt`, `issuedAt`, `left`) with their trainer key (`TrainerKeyStore`, one per Mac, or per `PTB_STATE_DIR`). The newest
   `issuedAt` per key wins; equal times fall back to the signature. A tombstone (`left`) is undone by a
@@ -33,9 +44,10 @@ the `_ptb-board` service keep the board name.
   receipts both players signed, between current members, at most 3 per pair per ISO week (UTC).
   `battleRecord` is shown but never scored. Weights live in `BoardScoring`; the page shows what the app
   computed.
-- **Sync** (`_ptb-board`, separate from battles). Off by default. Each connection: nonces, one HMAC
-  proof per board held, then per shared board a digest (`key → issuedAt`, receipt ids) and only the
-  rows the other side lacks. Unshared boards never cross the wire. Peers use a random per-run name.
+- **Sync** (`_ptb-board`, separate from battles, version 2). Off by default; runs without a league too.
+  Each connection: nonces, each side lists the board ids it holds (200 at most), then for every board
+  either side holds a digest (`key → issuedAt`, receipt ids) and only the rows the other side lacks.
+  Version 1 peers (proof-based, private boards) are refused. Peers use a random per-run name.
 - **Leaving** signs a tombstone and hides the board; it keeps syncing until one completed exchange has
   carried the tombstone, then it's forgotten.
 
@@ -72,7 +84,9 @@ the `_ptb-board` service keep the board name.
 Signatures prove who said something, not that it's true: an edited save or a modified app can claim any
 plausible collection, and two app instances can co-sign each other within the weekly pair limit.
 Fingerprints (4 Crockford characters of the key's hash) tell equal names apart. A leaked code can't be
-revoked; the fix is a new board.
+revoked; the fix is a new board. Every board's members, stats and teams reach anyone nearby with sync on.
+Anyone can mint valid boards of their own, so a peer can fill the 50 watched slots with fake ones; the
+most recently active stay.
 
 ## Trainer page (local API)
 

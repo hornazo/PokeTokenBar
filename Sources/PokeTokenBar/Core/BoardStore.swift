@@ -1,8 +1,9 @@
 import CryptoKit
 import Foundation
 
-/// The league (a board) this trainer is in, with its replica, kept in `boards.json` next to the save. One at a
-/// time, so nobody battles themselves for points on two boards; a save from before that rule may hold several.
+/// The league (a board) this trainer is in, with its replica, plus every other league seen nearby (watched,
+/// read-only), kept in `boards.json` next to the save. One league at a time, so nobody battles themselves
+/// for points on two boards; a save from before that rule may hold several.
 /// Board sync merges what peers send; the app re-signs our own rows when our stats change.
 @MainActor @Observable
 final class BoardStore {
@@ -17,16 +18,20 @@ final class BoardStore {
         var syncedWith: [String] = []
         /// Set when we left: the board stays, hidden, until one sync has carried our tombstone.
         var leftAt: Int64?
+        /// The name a board had before it moved to its public id, until a member's row brings it back.
+        var carriedName: String? = nil
 
         var id: String { replica.boardId }
         var boardCode: BoardCode { BoardCode(code)! }
         /// Before the first sync a joiner only has its placeholder.
-        var name: String { replica.name ?? Self.placeholderName(boardCode) }
+        var name: String { replica.name ?? carriedName ?? Self.placeholderName(boardCode) }
 
         static func placeholderName(_ code: BoardCode) -> String { "Board \(code.value.prefix(4))" }
     }
 
     static let shared = BoardStore()
+    /// Other leagues kept at most, the most recently active first.
+    static let watchedCap = 50
 
     enum StoreError: Error, Equatable {
         case invalidCode, invalidName
@@ -38,6 +43,8 @@ final class BoardStore {
     private(set) var all: [Board] = []
     /// The boards we are in.
     var boards: [Board] { all.filter { $0.leftAt == nil } }
+    /// Leagues we're not in, as they reached us nearby: read-only, no code.
+    private(set) var watched: [BoardReplica] = []
     /// Bumped on every change, so observers (the local API's event stream) react to one value.
     private(set) var revision = 0
 
@@ -87,12 +94,14 @@ final class BoardStore {
     private func add(code: BoardCode, boardName: String, displayName: String, stats: BoardStats) async throws {
         let key = try await identity.privateKey()
         let joinedAt = now()
-        var replica = BoardReplica(boardId: code.boardId)
-        replica.merge(try BoardRecord.signed(boardId: code.boardId, boardName: boardName, displayName: Self.sanitizedName(displayName),
-                                             stats: stats, joinedAt: joinedAt, issuedAt: joinedAt, left: false, key: key),
-                      now: joinedAt)
         // Checked again: another create or join may have finished while the key loaded.
         guard boards.isEmpty else { throw StoreError.alreadyJoined }
+        // A league we watched already has its members' rows.
+        var replica = watched.first { $0.boardId == code.boardId } ?? BoardReplica(boardId: code.boardId)
+        replica.merge(try BoardRecord.signed(code: code, boardName: boardName, displayName: Self.sanitizedName(displayName),
+                                             stats: stats, joinedAt: joinedAt, issuedAt: joinedAt, left: false, key: key),
+                      now: joinedAt)
+        watched.removeAll { $0.boardId == code.boardId }
         all.removeAll { $0.id == code.boardId }   // rejoining a board we left
         all.append(Board(code: code.value, joinedAt: joinedAt, replica: replica))
         changed()
@@ -104,7 +113,7 @@ final class BoardStore {
         guard let key = try? await identity.privateKey(), let i = index(id), all[i].leftAt == nil else { return }
         let t = now()
         if let mine = all[i].replica.records[TrainerSigning.encode(key.publicKey)],
-           let tombstone = try? BoardRecord.signed(boardId: id, boardName: mine.boardName, displayName: mine.displayName,
+           let tombstone = try? BoardRecord.signed(code: all[i].boardCode, boardName: mine.boardName, displayName: mine.displayName,
                                                    stats: mine.stats, joinedAt: mine.joinedAt, issuedAt: max(t, mine.issuedAt + 1),
                                                    left: true, key: key) {
             all[i].replica.merge(tombstone, now: t)
@@ -125,10 +134,10 @@ final class BoardStore {
         for index in all.indices where all[index].leftAt == nil {
             let board = all[index]
             let mine = board.replica.records[publicKey]
-            let boardName = board.replica.name ?? ""
+            let boardName = board.replica.name ?? board.carriedName ?? ""
             if let mine, !mine.left, mine.displayName == displayName, mine.stats == stats, mine.boardName == boardName { continue }
             let issuedAt = max(now(), (mine?.issuedAt ?? 0) + 1)
-            guard let record = try? BoardRecord.signed(boardId: board.id, boardName: boardName, displayName: displayName,
+            guard let record = try? BoardRecord.signed(code: board.boardCode, boardName: boardName, displayName: displayName,
                                                        stats: stats, joinedAt: board.joinedAt, issuedAt: issuedAt,
                                                        left: false, key: key) else { continue }
             didChange = all[index].replica.merge(record, now: issuedAt) || didChange
@@ -139,11 +148,17 @@ final class BoardStore {
     // MARK: Sync and battles
 
     /// Merges what a peer sent for one board after a completed exchange. Invalid rows are dropped inside
-    /// the replica. The peer also got our rows, so a board we left has delivered its tombstone and goes.
+    /// the replica. The peer also got our rows, so a board we left has delivered its tombstone and is only
+    /// watched from then on. A board we're not in is watched.
     func merge(boardId: String, records: [BoardRecord], receipts: [BattleReceipt], from peer: String?) {
-        guard let index = index(boardId) else { return }
+        guard let index = index(boardId) else {
+            if mergeWatched(boardId, records: records, receipts: receipts) { changed() }
+            return
+        }
         if all[index].leftAt != nil {
-            all.remove(at: index)
+            let left = all.remove(at: index)
+            mergeWatched(boardId, records: Array(left.replica.records.values) + records,
+                         receipts: Array(left.replica.receipts.values) + receipts)
             return changed()
         }
         let t = now()
@@ -158,8 +173,37 @@ final class BoardStore {
         changed()
     }
 
-    /// The replica of any board we still sync, left ones included.
-    func replica(_ boardId: String) -> BoardReplica? { index(boardId).map { all[$0].replica } }
+    /// The replica of any board we still sync: ours, left ones, watched ones.
+    func replica(_ boardId: String) -> BoardReplica? {
+        index(boardId).map { all[$0].replica } ?? watched.first { $0.boardId == boardId }
+    }
+
+    /// Everything we hold, for a sync: every board either side has goes both ways.
+    var syncReplicas: [String: BoardReplica] {
+        var replicas = Dictionary(watched.map { ($0.boardId, $0) }, uniquingKeysWith: { a, _ in a })
+        for board in all { replicas[board.id] = board.replica }
+        return replicas
+    }
+
+    /// Keeps a league we're not in when at least one valid member came with it; the least recently active
+    /// ones go past the cap.
+    @discardableResult
+    private func mergeWatched(_ boardId: String, records: [BoardRecord], receipts: [BattleReceipt]) -> Bool {
+        guard BoardSyncSession.isBoardId(boardId) else { return false }
+        let t = now()
+        var replica = watched.first { $0.boardId == boardId } ?? BoardReplica(boardId: boardId)
+        var didChange = false
+        for record in records { didChange = replica.merge(record, now: t) || didChange }
+        for receipt in receipts { didChange = replica.merge(receipt, now: t) || didChange }
+        guard didChange else { return false }
+        watched.removeAll { $0.boardId == boardId }
+        if !replica.members.isEmpty { watched.append(replica) }
+        watched.sort { (Self.lastActivity($0), $1.boardId) > (Self.lastActivity($1), $0.boardId) }
+        if watched.count > Self.watchedCap { watched.removeLast(watched.count - Self.watchedCap) }
+        return true
+    }
+
+    static func lastActivity(_ replica: BoardReplica) -> Int64 { replica.records.values.map(\.issuedAt).max() ?? 0 }
 
     /// A co-signed battle result for one of our boards.
     @discardableResult
@@ -176,8 +220,9 @@ final class BoardStore {
     // MARK: Persistence
 
     private struct File: Codable {
-        var version = 1
+        var version = 2
         var boards: [Board]
+        var watched: [BoardReplica]?
     }
 
     private func changed() {
@@ -188,7 +233,9 @@ final class BoardStore {
     private func load() {
         guard let data = try? Data(contentsOf: fileURL) else { return }
         do {
-            all = try JSONDecoder().decode(File.self, from: data).boards.filter { BoardCode($0.code) != nil }
+            let file = try JSONDecoder().decode(File.self, from: data)
+            all = file.boards.filter { BoardCode($0.code) != nil }.map(Self.movedToPublicId)
+            watched = file.watched ?? []
         } catch {
             AppLog.write("boards.json unreadable, starting empty: \(error)")
         }
@@ -196,11 +243,19 @@ final class BoardStore {
 
     private func save() {
         do {
-            let data = try JSONEncoder().encode(File(boards: all))
+            let data = try JSONEncoder().encode(File(boards: all, watched: watched))
             try data.write(to: fileURL, options: [.atomic])
         } catch {
             AppLog.write("boards.json not saved: \(error)")
         }
+    }
+
+    /// Boards saved before standings were public used an id only code holders could compute. Moved to the
+    /// public one with an empty replica: our row is re-signed on the next publish, the others' on theirs.
+    static func movedToPublicId(_ board: Board) -> Board {
+        guard board.replica.boardId != board.boardCode.boardId else { return board }
+        return Board(code: board.code, joinedAt: board.joinedAt, replica: BoardReplica(boardId: board.boardCode.boardId),
+                     lastSyncAt: nil, syncedWith: [], leftAt: board.leftAt, carriedName: board.replica.name)
     }
 
     static func sanitizedName(_ raw: String) -> String {

@@ -69,8 +69,10 @@ enum LocalAPIPayloads {
         let members: [Member]
         let lastSyncAt: Int64?
         let syncedPeers: Int
+        /// False for a league we only watch.
+        let member: Bool
 
-        private enum CodingKeys: String, CodingKey { case id, name, you, members, lastSyncAt, syncedPeers }
+        private enum CodingKeys: String, CodingKey { case id, name, you, members, lastSyncAt, syncedPeers, member }
 
         func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: CodingKeys.self)
@@ -80,6 +82,7 @@ enum LocalAPIPayloads {
             try c.encode(members, forKey: .members)
             try c.encode(lastSyncAt, forKey: .lastSyncAt)
             try c.encode(syncedPeers, forKey: .syncedPeers)
+            try c.encode(member, forKey: .member)
         }
     }
 
@@ -94,18 +97,26 @@ enum LocalAPIPayloads {
                 gameStats: showcase.gameStats, aiBand: aiBand)
     }
 
-    /// Never includes a board's code: the page only shows boards, it can't hand them out.
-    static func boards(_ boards: [BoardStore.Board], you: String?, syncEnabled: Bool) -> Boards {
-        Boards(boards: boards.map { board in
-            let members = BoardScoring.standings(board.replica).map { standing in
+    /// Your leagues first, then the ones you watch, most recently active first. Never includes a board's
+    /// code: the page only shows boards, it can't hand them out.
+    static func boards(_ boards: [BoardStore.Board], watched: [BoardReplica] = [], you: String?, syncEnabled: Bool) -> Boards {
+        func members(_ replica: BoardReplica) -> [Member] {
+            BoardScoring.standings(replica).map { standing in
                 Member(publicKey: standing.record.publicKey, fingerprint: standing.record.fingerprint,
                        displayName: standing.record.displayName, isYou: standing.record.publicKey == you,
                        joinedAt: standing.record.joinedAt, updatedAt: standing.record.issuedAt, stats: standing.record.stats,
                        score: standing.score, rank: standing.rank, counted: standing.counted)
             }
-            return Board(id: board.id, name: board.name, you: you ?? "", members: members,
-                         lastSyncAt: board.lastSyncAt, syncedPeers: board.syncedWith.count)
-        }, syncEnabled: syncEnabled)
+        }
+        let mine = boards.map { board in
+            Board(id: board.id, name: board.name, you: you ?? "", members: members(board.replica),
+                  lastSyncAt: board.lastSyncAt, syncedPeers: board.syncedWith.count, member: true)
+        }
+        let others = watched.map { replica in
+            Board(id: replica.boardId, name: replica.name ?? "League \(replica.boardId.prefix(4).uppercased())", you: you ?? "",
+                  members: members(replica), lastSyncAt: nil, syncedPeers: 0, member: false)
+        }
+        return Boards(boards: mine + others, syncEnabled: syncEnabled)
     }
 
     static func encode(_ value: some Encodable) -> Data {

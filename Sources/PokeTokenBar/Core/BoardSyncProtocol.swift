@@ -1,18 +1,22 @@
 import Foundation
 
-/// What two Macs say to sync the boards they share. Neither side learns anything about boards the other
-/// holds and it doesn't: membership is proven with an HMAC of the code over both sides' fresh nonces.
+/// What two Macs say to sync boards. Standings are public: each side lists the boards it holds, and both
+/// exchange every board either one has. Rows prove their own membership (`BoardRecord.hasValidMembership`),
+/// so a Mac without a board's code can hold and pass on its rows but never add a member.
 enum BoardSyncMessage: Codable, Sendable, Equatable {
     case hello(version: Int, nonce: String)
-    /// One proof per board held, in random order.
-    case proofs([String])
-    /// For each shared board: who we have and how fresh (`publicKey → issuedAt`), and which receipts.
+    /// Ids of every board we hold, members' and watched ones.
+    case boards([String])
+    /// For each board either side holds: who we have and how fresh (`publicKey → issuedAt`), and which receipts.
     case digest(boardId: String, records: [String: Int64], receipts: [String])
-    /// What the peer lacked, in answer to its digest. The last message per shared board.
+    /// What the peer lacked, in answer to its digest. The last message per board.
     case rows(boardId: String, records: [BoardRecord], receipts: [BattleReceipt])
 
-    static let version = 1
+    /// 2: boards are public and listed instead of proven.
+    static let version = 2
     static let maxSize = 1024 * 1024
+    /// Boards one peer may list; well above what a Mac keeps.
+    static let maxBoards = 200
 
     func encoded() throws -> Data { try JSONEncoder().encode(self) }
 
@@ -31,24 +35,21 @@ enum BoardSyncError: Error, Equatable, Sendable {
 /// Both sides run the same steps, so neither waits for the other to go first.
 struct BoardSyncSession {
     struct Shared: Equatable {
-        let code: BoardCode
         var received: (records: [BoardRecord], receipts: [BattleReceipt])?
 
-        static func == (a: Shared, b: Shared) -> Bool { a.code == b.code && (a.received == nil) == (b.received == nil) }
+        static func == (a: Shared, b: Shared) -> Bool { (a.received == nil) == (b.received == nil) }
     }
 
     private let replicas: [String: BoardReplica]
-    private let codes: [BoardCode]
     private let myNonce: String
     private var theirNonce: String?
+    /// Every board either side holds, once both lists are in.
     private(set) var shared: [String: Shared] = [:]
     private var answered: Set<String> = []
-    private var provedTo = false
-    private var gotProofs = false
+    private var gotBoards = false
 
-    /// `replicas` by board id, for every code in `codes`.
-    init(codes: [BoardCode], replicas: [String: BoardReplica], nonce: String = UUID().uuidString) {
-        self.codes = codes
+    /// `replicas` by board id: every board we hold.
+    init(replicas: [String: BoardReplica], nonce: String = UUID().uuidString) {
         self.replicas = replicas
         myNonce = nonce
     }
@@ -56,12 +57,10 @@ struct BoardSyncSession {
     /// What to send first.
     func start() -> [BoardSyncMessage] { [.hello(version: BoardSyncMessage.version, nonce: myNonce)] }
 
-    /// Every shared board has been answered both ways (or there was nothing to share).
+    /// Every board has been answered both ways (or neither side holds any).
     var isFinished: Bool {
-        provedTo && gotProofs && shared.values.allSatisfy { $0.received != nil } && answered.count == shared.count
+        gotBoards && shared.values.allSatisfy { $0.received != nil } && answered.count == shared.count
     }
-
-    static func proofContext(prover: String, verifier: String) -> String { "ptb-board-sync|\(prover)|\(verifier)" }
 
     mutating func receive(_ message: BoardSyncMessage) throws -> [BoardSyncMessage] {
         switch message {
@@ -69,22 +68,17 @@ struct BoardSyncSession {
             guard version == BoardSyncMessage.version else { throw BoardSyncError.incompatibleVersion(version) }
             guard theirNonce == nil, !nonce.isEmpty, nonce.count <= 64, nonce != myNonce else { throw BoardSyncError.protocolViolation }
             theirNonce = nonce
-            provedTo = true
-            let context = Self.proofContext(prover: myNonce, verifier: nonce)
-            return [.proofs(codes.map { $0.proof(context) }.shuffled())]
+            return [.boards(replicas.keys.sorted())]
 
-        case .proofs(let proofs):
-            guard let theirNonce, !gotProofs, proofs.count <= 200 else { throw BoardSyncError.protocolViolation }
-            gotProofs = true
-            let theirs = Set(proofs)
-            let context = Self.proofContext(prover: theirNonce, verifier: myNonce)
-            var out: [BoardSyncMessage] = []
-            for code in codes where theirs.contains(code.proof(context)) {
-                shared[code.boardId] = Shared(code: code, received: nil)
-                let replica = replicas[code.boardId] ?? BoardReplica(boardId: code.boardId)
-                out.append(.digest(boardId: code.boardId, records: replica.digest, receipts: Array(replica.receipts.keys).sorted()))
+        case .boards(let ids):
+            guard theirNonce != nil, !gotBoards, ids.count <= BoardSyncMessage.maxBoards,
+                  ids.allSatisfy(Self.isBoardId) else { throw BoardSyncError.protocolViolation }
+            gotBoards = true
+            for id in Set(replicas.keys).union(ids) { shared[id] = Shared(received: nil) }
+            return shared.keys.sorted().map { id in
+                let replica = replicas[id] ?? BoardReplica(boardId: id)
+                return .digest(boardId: id, records: replica.digest, receipts: Array(replica.receipts.keys).sorted())
             }
-            return out
 
         case .digest(let boardId, let theirRecords, let theirReceipts):
             guard shared[boardId] != nil, !answered.contains(boardId) else { throw BoardSyncError.protocolViolation }
@@ -103,5 +97,10 @@ struct BoardSyncSession {
             shared[boardId] = entry
             return []
         }
+    }
+
+    /// A SHA-256 hex digest, like every board id.
+    static func isBoardId(_ id: String) -> Bool {
+        id.count == 64 && id.allSatisfy { $0.isHexDigit && !$0.isUppercase }
     }
 }

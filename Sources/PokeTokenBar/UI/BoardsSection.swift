@@ -34,7 +34,6 @@ struct BoardsSection: View {
                 get: { settings.boardSync },
                 set: { settings.boardSync = $0; sync.update(enabled: $0) }))
                 .toggleStyle(.switch).controlSize(.small)
-                .disabled(boards.codes.isEmpty)
             Text(l.boardsSyncHint).font(.caption2).foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }

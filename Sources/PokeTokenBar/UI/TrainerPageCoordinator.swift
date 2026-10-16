@@ -131,7 +131,7 @@ final class TrainerPageCoordinator {
             let snapshot = hub.current.map { BattleSpectatorSnapshot.make(from: $0, id: hub.battleId, trainerName: context.displayName) }
             return LocalAPIPayloads.encode(LocalAPIPayloads.Battle(battle: snapshot))
         case .boards:
-            return LocalAPIPayloads.encode(LocalAPIPayloads.boards(boards.boards, you: context.publicKey, syncEnabled: settings.boardSync))
+            return LocalAPIPayloads.encode(LocalAPIPayloads.boards(boards.boards, watched: boards.watched, you: context.publicKey, syncEnabled: settings.boardSync))
         case .history:
             return LocalAPIPayloads.encode(LocalAPIPayloads.History(battles: history.entries))
         case .trainers:

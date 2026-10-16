@@ -21,7 +21,8 @@ enum BoardRules {
     static func now() -> Int64 { Int64((Date().timeIntervalSince1970 * 1000).rounded()) }
 }
 
-/// The invite code is the board's secret: whoever holds it can join and sync. 60 random bits.
+/// The invite code is the board's secret: whoever holds it can join. 60 random bits. Standings are public:
+/// any Mac nearby may hold and pass on a board's rows, and checks membership with the board's public key.
 struct BoardCode: Hashable, Sendable {
     /// Normalized: 12 Crockford characters, no separators.
     let value: String
@@ -43,8 +44,27 @@ struct BoardCode: Hashable, Sendable {
         return [String(c[0..<4]), String(c[4..<8]), String(c[8..<12])].joined(separator: "-")
     }
 
-    /// Public id derived from the secret; reveals nothing about it.
-    var boardId: String { TrainerSigning.sha256Hex(Data("ptb-board:\(value)".utf8)) }
+    /// Signs memberships; derived from the code, so every member holds it and nobody else does.
+    var signingKey: Curve25519.Signing.PrivateKey {
+        // A SHA-256 digest is always 32 bytes, a valid Ed25519 seed.
+        try! Curve25519.Signing.PrivateKey(rawRepresentation: SHA256.hash(data: Data("ptb-board-sign:\(value)".utf8)))
+    }
+
+    /// The board's public key, carried on every row so anyone can check memberships.
+    var leagueKey: String { TrainerSigning.encode(signingKey.publicKey) }
+
+    /// Public id derived from the board's public key; reveals nothing about the code.
+    var boardId: String { Self.boardId(leagueKey: leagueKey) }
+
+    static func boardId(leagueKey: String) -> String { TrainerSigning.sha256Hex(Data("ptb-board-v2:\(leagueKey)".utf8)) }
+
+    /// The id boards had before standings were public, for moving saved boards over.
+    var legacyBoardId: String { TrainerSigning.sha256Hex(Data("ptb-board:\(value)".utf8)) }
+
+    /// Proof that `publicKey` was let in by someone holding the code.
+    func membership(for publicKey: String) throws -> String {
+        try TrainerSigning.sign(BoardRecord.membershipMessage(boardId: boardId, publicKey: publicKey), with: signingKey)
+    }
 
     var key: SymmetricKey { SymmetricKey(data: SHA256.hash(data: Data("ptb-board-key:\(value)".utf8))) }
 
@@ -148,6 +168,10 @@ struct BoardRecord: Codable, Equatable, Sendable {
     /// A tombstone: the member left. A later row from the same key rejoins.
     let left: Bool
     let signature: String
+    /// The board's public key (`BoardCode.leagueKey`), which `boardId` is derived from.
+    var leagueKey: String = ""
+    /// The board key's signature over this member's key (`BoardCode.membership`): only a code holder can make it.
+    var membership: String = ""
 
     private struct Unsigned: Encodable {
         let boardId, boardName, publicKey, displayName: String
@@ -166,14 +190,26 @@ struct BoardRecord: Codable, Equatable, Sendable {
         return Data("PTB-BOARD-RECORD-V1\n".utf8) + body
     }
 
-    static func signed(boardId: String, boardName: String, displayName: String, stats: BoardStats, joinedAt: Int64,
+    static func signed(code: BoardCode, boardName: String, displayName: String, stats: BoardStats, joinedAt: Int64,
                        issuedAt: Int64, left: Bool, key: Curve25519.Signing.PrivateKey) throws -> BoardRecord {
         let publicKey = TrainerSigning.encode(key.publicKey)
+        let boardId = code.boardId
         let message = message(boardId: boardId, boardName: boardName, publicKey: publicKey, displayName: displayName,
                               stats: stats, joinedAt: joinedAt, issuedAt: issuedAt, left: left)
         return BoardRecord(boardId: boardId, boardName: boardName, publicKey: publicKey, displayName: displayName,
                            stats: stats, joinedAt: joinedAt, issuedAt: issuedAt, left: left,
-                           signature: try TrainerSigning.sign(message, with: key))
+                           signature: try TrainerSigning.sign(message, with: key),
+                           leagueKey: code.leagueKey, membership: try code.membership(for: publicKey))
+    }
+
+    static func membershipMessage(boardId: String, publicKey: String) -> Data {
+        Data("PTB-BOARD-MEMBER-V1\n\(boardId)\n\(publicKey)".utf8)
+    }
+
+    /// The board key behind `boardId` let this member in.
+    var hasValidMembership: Bool {
+        !leagueKey.isEmpty && BoardCode.boardId(leagueKey: leagueKey) == boardId
+            && TrainerSigning.verify(membership, of: Self.membershipMessage(boardId: boardId, publicKey: publicKey), by: leagueKey)
     }
 
     var hasValidSignature: Bool {
@@ -191,6 +227,7 @@ struct BoardRecord: Codable, Equatable, Sendable {
             && joinedAt > 0 && joinedAt <= issuedAt && issuedAt <= now + BoardRules.maxClockSkewMs
             && stats.isPlausible
             && hasValidSignature
+            && hasValidMembership
     }
 
     /// Newest row wins; identical times fall back to the signature so every replica picks the same one.
@@ -199,6 +236,24 @@ struct BoardRecord: Codable, Equatable, Sendable {
     }
 
     var fingerprint: String { TrainerSigning.fingerprint(publicKey) }
+}
+
+extension BoardRecord {
+    private enum CodingKeys: String, CodingKey {
+        case boardId, boardName, publicKey, displayName, stats, joinedAt, issuedAt, left, signature, leagueKey, membership
+    }
+
+    /// Rows saved before memberships existed decode with empty ones, and no longer pass `isAcceptable`.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(boardId: try c.decode(String.self, forKey: .boardId), boardName: try c.decode(String.self, forKey: .boardName),
+                  publicKey: try c.decode(String.self, forKey: .publicKey), displayName: try c.decode(String.self, forKey: .displayName),
+                  stats: try c.decode(BoardStats.self, forKey: .stats), joinedAt: try c.decode(Int64.self, forKey: .joinedAt),
+                  issuedAt: try c.decode(Int64.self, forKey: .issuedAt), left: try c.decode(Bool.self, forKey: .left),
+                  signature: try c.decode(String.self, forKey: .signature),
+                  leagueKey: try c.decodeIfPresent(String.self, forKey: .leagueKey) ?? "",
+                  membership: try c.decodeIfPresent(String.self, forKey: .membership) ?? "")
+    }
 }
 
 /// A battle result both players signed. Only receipts score battle points.

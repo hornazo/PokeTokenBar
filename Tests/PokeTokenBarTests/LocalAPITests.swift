@@ -150,7 +150,7 @@ final class LocalAPIPayloadTests: XCTestCase {
         let key = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 1, count: 32))
         var replica = BoardReplica(boardId: code.boardId)
         let now = BoardRules.now()
-        replica.merge(try BoardRecord.signed(boardId: code.boardId, boardName: "Kanto", displayName: "Ash",
+        replica.merge(try BoardRecord.signed(code: code, boardName: "Kanto", displayName: "Ash",
                                              stats: BoardStats(collection: .init(dex: 2, species: 2)),
                                              joinedAt: now, issuedAt: now, left: false, key: key))
         let board = BoardStore.Board(code: code.value, joinedAt: now, replica: replica, lastSyncAt: nil)

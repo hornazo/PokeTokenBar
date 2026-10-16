@@ -24,7 +24,7 @@ final class TrainerDirectoryTests: XCTestCase {
     private let code = BoardCode("ABCD-EFGH-JKMN")!
 
     private func row(_ n: UInt8, _ name: String, joined: Int64, team: [BoardStats.TeamMember] = []) -> BoardRecord {
-        try! BoardRecord.signed(boardId: code.boardId, boardName: "Kanto", displayName: name,
+        try! BoardRecord.signed(code: code, boardName: "Kanto", displayName: name,
                                 stats: BoardStats(collection: .init(dex: Int(n), species: Int(n)), team: team),
                                 joinedAt: joined, issuedAt: joined, left: false, key: privateKey(n))
     }
